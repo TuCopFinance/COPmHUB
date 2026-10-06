@@ -4,7 +4,7 @@ export type ServiceSocial = {
 };
 
 export type Service = {
-  id: "tucop" | "cards" | "copby" | "neeru";
+  id: "tucop" | "cards" | "copby" | "arc" | "neeru";
   name: string;
   description: string;
   href: string;
@@ -16,6 +16,7 @@ export type Service = {
   partner?: boolean;
   tag?: string;
   socials?: ServiceSocial[];
+  contact?: ServiceSocial;
 };
 
 export type ServiceLinkProps = {
@@ -60,6 +61,22 @@ export const services: Service[] = [
     tag: "Cambio",
     status: "live",
     external: true,
+  },
+  {
+    id: "arc",
+    name: "Arc → COPm",
+    description:
+      "Convierte USDC en Arc a COPm en Celo con una ruta verificable en cada etapa.",
+    href: "https://copby.digitalcop.shop",
+    cta: "Explorar Arc → COPm",
+    tag: "Infraestructura",
+    status: "live",
+    external: true,
+    contact: {
+      label: "Hablar con el equipo",
+      href:
+        "https://t.me/CeloCol?text=Hola%20equipo%20de%20Celo%20Colombia%2C%20me%20interesa%20integrar%20Arc%20%E2%86%92%20COPm%20con%20COP%20By%20para%20convertir%20USDC%20en%20Arc%20a%20COPm%20en%20Celo.%20%C2%BFCon%20qui%C3%A9n%20puedo%20hablar%20para%20evaluar%20la%20integraci%C3%B3n%3F",
+    },
   },
   {
     id: "neeru",
