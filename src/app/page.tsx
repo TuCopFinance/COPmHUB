@@ -5,9 +5,11 @@ import { Hero } from "@/components/Hero";
 import { HowItWorks } from "@/components/HowItWorks";
 import { JsonLd } from "@/components/JsonLd";
 import { Nav } from "@/components/Nav";
+import { OfframpPopup } from "@/components/offramp/OfframpPopup";
 import { Services } from "@/components/Services";
 import { WhatIs } from "@/components/WhatIs";
 import { HOME_FAQ } from "@/lib/faq";
+import { isOfframpEnabled } from "@/lib/offramp/config";
 import { faqJsonLd, organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 
 export default function HomePage() {
@@ -24,6 +26,7 @@ export default function HomePage() {
       <MiniPayStrip />
       <Faq />
       <Footer />
+      {isOfframpEnabled() ? <OfframpPopup /> : null}
     </main>
   );
 }

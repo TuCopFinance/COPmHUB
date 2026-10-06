@@ -1,4 +1,6 @@
 import { CtaLink } from "@/components/CtaLink";
+import { OfframpPromo } from "@/components/offramp/OfframpPromo";
+import { isOfframpEnabled } from "@/lib/offramp/config";
 import { serviceLinkProps, services } from "@/lib/services";
 
 const doors = services.filter((service) =>
@@ -125,6 +127,8 @@ export function Services() {
             );
           })}
         </div>
+
+        {isOfframpEnabled() ? <OfframpPromo /> : null}
 
         <p className="mt-10 text-sm text-muted">
           ¿Tu proyecto usa COPm?{" "}

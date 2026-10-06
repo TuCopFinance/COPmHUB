@@ -21,6 +21,7 @@ src/
     nosotros/             Legal: about
     terminos/             Legal: terms
     privacidad/           Legal: privacy
+    offramp/              Bre-B off-ramp pre-registration form (feature-flagged)
     que-es-copm/          SEO cluster page
     cambiar-usd-a-cop/    SEO cluster page
     invertir-pesos-digitales/    SEO cluster page
@@ -42,6 +43,20 @@ public/
 ```
 
 `src/lib/services.ts` is the source of truth for the core Services section. `content/ecosystem/*.json` is the source of truth for `/ecosystem`. `src/lib/site.ts` drives URLs, nav, SEO cluster / legal pages, and the sitemap.
+
+## Bre-B off-ramp pre-registration (optional, off by default)
+
+`/offramp` lets a person pre-register for the off-ramp to Bre-B keys in Colombia without leaving the hub: confirm an email with a one-time code, enter their name and identity document, complete KYC and terms on Bridge's hosted pages, and register their own Bre-B key. It only collects the pre-registration; withdrawals are not built.
+
+The hub hosts the form and nothing else. The service is operated by TuCOP, and the browser sends everything straight to its TuCOPRamp API (`/v1/prereg/*`). This repo has no database, no API routes and no secrets for it, and the hub's server never sees personal data.
+
+```text
+src/app/offramp/          the pre-registration page
+src/components/offramp/   form, promo card, one-time pop-up
+src/lib/offramp/          flag + public config, copy, error messages
+```
+
+The card on the home page, the pop-up and the page stay off unless `OFFRAMP_ENABLED=true` and the variables in [`.env.example`](./.env.example) are set. The home and privacy pages are static, so the flag is read at build time; changing it needs a redeploy. The hub origin must be listed in TuCOPRamp's `CORS_ORIGINS`.
 
 ## Listing a community project
 
