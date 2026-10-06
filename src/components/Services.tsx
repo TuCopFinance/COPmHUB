@@ -22,6 +22,7 @@ function StatusPill({ partner }: { partner?: boolean }) {
 }
 
 export function Services() {
+  const offramp = isOfframpEnabled();
   return (
     <section id="servicios" className="border-t border-line px-6 py-20 sm:py-28">
       <div className="relative z-10 mx-auto max-w-6xl">
@@ -33,7 +34,11 @@ export function Services() {
           conecta Arc a COPm o explora rendimiento en Neeru.
         </p>
 
-        <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {offramp ? <OfframpPromo /> : null}
+
+        <div
+          className={`${offramp ? "mt-4" : "mt-12"} grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5`}
+        >
           {doors.map((service, index) => {
             const link = serviceLinkProps(service);
             const outbound = link.href ?? service.href;
@@ -127,8 +132,6 @@ export function Services() {
             );
           })}
         </div>
-
-        {isOfframpEnabled() ? <OfframpPromo /> : null}
 
         <p className="mt-10 text-sm text-muted">
           ¿Tu proyecto usa COPm?{" "}

@@ -4,7 +4,7 @@ import { OFFRAMP_COPY } from "@/lib/offramp/copy";
 
 export function OfframpPromo() {
   return (
-    <div className="reveal mt-4 flex flex-col gap-6 rounded-[20px] border border-brand/25 bg-white p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+    <div className="reveal mt-12 flex flex-col gap-6 rounded-[20px] border border-brand/25 bg-white p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
       <div className="max-w-2xl">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold uppercase tracking-wide text-brand">
