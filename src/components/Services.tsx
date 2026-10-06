@@ -2,7 +2,7 @@ import { CtaLink } from "@/components/CtaLink";
 import { serviceLinkProps, services } from "@/lib/services";
 
 const doors = services.filter((service) =>
-  ["tucop", "cards", "copby", "neeru"].includes(service.id),
+  ["tucop", "cards", "copby", "arc", "neeru"].includes(service.id),
 );
 
 function StatusPill({ partner }: { partner?: boolean }) {
@@ -24,14 +24,14 @@ export function Services() {
     <section id="servicios" className="border-t border-line px-6 py-20 sm:py-28">
       <div className="relative z-10 mx-auto max-w-6xl">
         <h2 className="max-w-2xl text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
-          Cuatro apps para tus pesos digitales
+          Servicios para tus pesos digitales
         </h2>
         <p className="mt-3 max-w-xl text-muted">
-          Guarda en TuCop, compra en el marketplace, cambia dólares con COP By
-          o explora rendimiento en Neeru.
+          Guarda en TuCop, compra en el marketplace, cambia dólares con COP By,
+          conecta Arc a COPm o explora rendimiento en Neeru.
         </p>
 
-        <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {doors.map((service, index) => {
             const link = serviceLinkProps(service);
             const outbound = link.href ?? service.href;
@@ -106,6 +106,18 @@ export function Services() {
                       className="text-sm font-semibold text-muted hover:text-ink"
                     >
                       Cómo funciona
+                    </CtaLink>
+                  ) : null}
+                  {service.contact ? (
+                    <CtaLink
+                      href={service.contact.href}
+                      label={service.contact.label}
+                      event="product_contact_click"
+                      section="servicios"
+                      product={service.id}
+                      className="text-sm font-semibold text-muted hover:text-ink"
+                    >
+                      {service.contact.label}
                     </CtaLink>
                   ) : null}
                 </div>

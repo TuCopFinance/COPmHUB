@@ -76,4 +76,18 @@ describe("services copy", () => {
     expect(neeru?.description.toLowerCase()).not.toContain("cada dia");
     expect(neeru?.description.toLowerCase()).not.toContain("cada día");
   });
+
+  it("lists Arc to COPm with a direct integration contact", () => {
+    const arc = services.find((service) => service.id === "arc");
+
+    expect(arc).toMatchObject({
+      name: "Arc → COPm",
+      tag: "Infraestructura",
+      cta: "Explorar Arc → COPm",
+      contact: {
+        label: "Hablar con el equipo",
+        href: expect.stringContaining("https://t.me/CeloCol?text="),
+      },
+    });
+  });
 });
