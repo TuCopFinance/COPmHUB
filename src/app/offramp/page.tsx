@@ -30,7 +30,7 @@ export default function OfframpPage() {
       <section className="px-6 py-16 sm:py-20">
         <div className="mx-auto max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-wide text-brand">
-            Preinscripción
+            Off-ramp
           </p>
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
             {OFFRAMP_COPY.title}
@@ -49,8 +49,9 @@ export default function OfframpPage() {
             Solo para cuentas en Colombia a tu propio nombre. El servicio lo
             opera {dataController}, que es quien guarda tus datos; la
             verificación de identidad y los pagos los procesa Bridge.
-            Preinscribirte no tiene costo ni te obliga a usar el servicio.
-            Aún no hay fecha de activación.
+            Registrarte no tiene costo ni te obliga a usar el servicio. Al
+            confirmar tu llave recibes una dirección de liquidación que solo
+            acepta USDC en la red Celo.
           </p>
         </div>
       </section>

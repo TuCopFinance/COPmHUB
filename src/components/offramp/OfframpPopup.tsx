@@ -69,7 +69,7 @@ export function OfframpPopup() {
           </svg>
         </button>
         <span className="rounded-full bg-celo-yellow px-2 py-0.5 text-[10px] font-bold tracking-wide text-ink">
-          NUEVO: PREINSCRIPCIÓN
+          NUEVO: YA DISPONIBLE
         </span>
         <h2
           id="offramp-popup-title"

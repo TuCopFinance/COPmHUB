@@ -11,7 +11,7 @@ export function OfframpPromo() {
             {OFFRAMP_COPY.tag}
           </span>
           <span className="rounded-full bg-celo-yellow px-2 py-0.5 text-[10px] font-bold tracking-wide text-ink">
-            PREINSCRIPCIÓN
+            YA DISPONIBLE
           </span>
         </div>
         <h3 className="mt-4 text-xl font-extrabold tracking-tight text-ink sm:text-2xl">
