@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { HOME_FAQ } from "@/lib/faq";
+import type { FaqItem } from "@/lib/faq";
 
-export function Faq() {
+export function Faq({ items }: { items: FaqItem[] }) {
   const [open, setOpen] = useState<number | null>(0);
 
   return (
@@ -20,7 +20,7 @@ export function Faq() {
           inventamos.
         </p>
         <div className="mt-10 divide-y divide-line rounded-[20px] border border-line bg-white">
-          {HOME_FAQ.map((item, index) => {
+          {items.map((item, index) => {
             const isOpen = open === index;
             return (
               <div key={item.question} className="px-5 sm:px-6">

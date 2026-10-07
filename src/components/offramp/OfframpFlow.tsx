@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { track } from "@/lib/analytics";
 import {
   DOCUMENT_TYPES,
@@ -13,44 +13,17 @@ import {
   readSessionToken,
   writeSessionToken,
 } from "@/components/offramp/session";
-
-type Destination = {
-  key_masked: string | null;
-  bank: string | null;
-  holder: string | null;
-  document_last4: string | null;
-};
-
-type Offramp = {
-  address: string;
-  chain: string;
-  currency: string;
-  token_address: string;
-  destination_currency: string;
-  developer_fee_percent: string;
-  min_payout_cop: number;
-};
-
-type State =
-  | "signed_out"
-  | "new"
-  | "kyc_pending"
-  | "kyc_approved"
-  | "destination_pending"
-  | "destination_verified"
-  | "rejected"
-  | "restricted";
-
-type Status = {
-  state: State;
-  email?: string;
-  kyc_link?: string | null;
-  tos_link?: string | null;
-  kyc_status?: string | null;
-  tos_status?: string | null;
-  destination?: Destination | null;
-  offramp?: Offramp | null;
-};
+import type { Status } from "@/components/offramp/types";
+import {
+  Field,
+  StatusLine,
+  Stepper,
+  headingClass,
+  inputClass,
+  primaryClass,
+  secondaryClass,
+  stepIndex,
+} from "@/components/offramp/ui";
 
 const SIGNED_OUT: Status = { state: "signed_out" };
 
@@ -58,109 +31,6 @@ class ApiError extends Error {
   constructor(readonly code: string | undefined) {
     super(offrampErrorMessage(code));
   }
-}
-
-const STEPS = ["Correo", "Tus datos", "Identidad", "Llave Bre-B", "Listo"];
-
-function stepIndex(state: State): number {
-  switch (state) {
-    case "signed_out":
-      return 0;
-    case "new":
-      return 1;
-    case "kyc_pending":
-    case "rejected":
-    case "restricted":
-      return 2;
-    case "kyc_approved":
-    case "destination_pending":
-      return 3;
-    case "destination_verified":
-      return 4;
-  }
-}
-
-const inputClass =
-  "mt-1.5 w-full rounded-xl border border-line bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-muted/60 focus:border-brand focus:ring-2 focus:ring-brand/20";
-const primaryClass =
-  "inline-flex items-center justify-center rounded-xl bg-brand px-5 py-3 text-sm font-bold text-white transition-opacity disabled:opacity-50";
-const secondaryClass =
-  "inline-flex items-center justify-center rounded-xl border border-line bg-white px-5 py-3 text-sm font-bold text-ink transition-colors hover:border-brand/40 disabled:opacity-50";
-const headingClass =
-  "text-xl font-extrabold tracking-tight text-ink outline-none";
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true">
-      <path
-        d="M2.5 6.5l2.2 2.2L9.5 3.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function Stepper({ current }: { current: number }) {
-  return (
-    <ol className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Pasos">
-      {STEPS.map((label, index) => {
-        const done = index < current;
-        const active = index === current;
-        return (
-          <li
-            key={label}
-            aria-current={active ? "step" : undefined}
-            className={
-              "flex items-center gap-2 text-xs font-bold " +
-              (active ? "text-ink" : done ? "text-brand" : "text-muted/70")
-            }
-          >
-            <span
-              className={
-                "flex h-6 w-6 items-center justify-center rounded-full text-[11px] " +
-                (active
-                  ? "bg-ink text-white"
-                  : done
-                    ? "bg-tint text-brand"
-                    : "border border-line bg-white")
-              }
-            >
-              {done ? <CheckIcon /> : index + 1}
-            </span>
-            {label}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function StatusLine({ label, done }: { label: string; done: boolean }) {
-  return (
-    <span className="flex items-center gap-2 text-sm">
-      <span
-        className={"h-2 w-2 rounded-full " + (done ? "bg-[#137211]" : "bg-gold")}
-        aria-hidden="true"
-      />
-      <span className="text-muted">
-        {label}:{" "}
-        <strong className="text-ink">{done ? "Listo" : "Pendiente"}</strong>
-      </span>
-    </span>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block text-sm font-semibold text-ink">
-      {label}
-      {children}
-    </label>
-  );
 }
 
 export function OfframpFlow({

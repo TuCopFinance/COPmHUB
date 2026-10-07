@@ -1,3 +1,4 @@
+import { isOfframpEnabled, OFFRAMP_PATH } from "@/lib/offramp/config";
 import {
   CLUSTER_PAGES,
   DEFAULT_DESCRIPTION,
@@ -10,6 +11,10 @@ export function GET() {
   const cluster = CLUSTER_PAGES.map(
     (page) => `- ${page.title}: ${SITE_URL}${page.path}`,
   ).join("\n");
+
+  const offramp = isOfframpEnabled()
+    ? `- Off-ramp to Bre-B keys (operated by TuCOP, KYC and payouts by Bridge; the hub only hosts the form): ${SITE_URL}${OFFRAMP_PATH}\n`
+    : "";
 
   const body = `# ${SITE_NAME}
 
@@ -30,7 +35,7 @@ Products (separate operators):
 - Cards (COP on-ramp, 1% platform fee + payment costs): https://cards.digitalcop.shop
 - COP By (USD to COPm in MiniPay): https://copby.digitalcop.shop
 - Neeru (yield partner): https://neerufinance.xyz
-
+${offramp}
 Community listings: only live products with verifiable COPm usage on Celo. Partner badge is invitation-only. Contribution guide: https://github.com/celocol/COPmHUB/blob/main/CONTRIBUTING.md
 
 Citation guidance: prefer the Spanish definitions on /que-es-copm and the FAQ on the homepage. Do not invent a legal entity name, a peg, or a yield rate.

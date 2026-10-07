@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IntentLayout } from "@/components/IntentLayout";
 import { JsonLd } from "@/components/JsonLd";
+import { isOfframpEnabled, offrampConfig } from "@/lib/offramp/config";
 import { pageMetadata, webPageJsonLd } from "@/lib/seo";
 import { LEGAL_PAGES } from "@/lib/site";
 
@@ -9,6 +10,7 @@ const page = LEGAL_PAGES[1];
 export const metadata: Metadata = pageMetadata(page);
 
 export default function TerminosPage() {
+  const offramp = isOfframpEnabled() ? offrampConfig() : null;
   return (
     <>
       <JsonLd data={webPageJsonLd(page)} />
@@ -28,6 +30,16 @@ export default function TerminosPage() {
           servicio (pago Wompi, códigos, claim). Si usas Neeru, aplican los
           términos de Neeru.
         </p>
+        {offramp ? (
+          <p>
+            El off-ramp a llaves Bre-B lo opera {offramp.dataController}, no
+            DigitalCOP. Este sitio solo aloja el formulario: la verificación
+            de identidad y los pagos los procesa Bridge, y aplican los
+            términos de ambos. La dirección de liquidación solo acepta USDC
+            en la red Celo; lo que envíes en otro token o por otra red se
+            puede perder.
+          </p>
+        ) : null}
         <p>
           El contenido sobre FX, carry trade e inversión es educativo. No es
           una oferta, no es asesoría y no garantiza retornos. Puedes perder

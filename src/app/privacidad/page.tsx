@@ -17,11 +17,11 @@ function OfframpPrivacy() {
         id="off-ramp"
         className="scroll-mt-24 text-xl font-extrabold tracking-tight"
       >
-        Preinscripción al off-ramp a llaves Bre-B
+        Off-ramp a llaves Bre-B
       </h2>
       <p>
-        La preinscripción al off-ramp es la única parte de este sitio que
-        pide datos personales. El responsable del tratamiento es{" "}
+        El registro al off-ramp es la única parte de este sitio que pide
+        datos personales. El responsable del tratamiento es{" "}
         {dataController}, que opera el servicio. El formulario envía tus
         datos directamente a sus sistemas: digitalcop.shop no los recibe ni
         los guarda. Para ejercer tus derechos o hacer una consulta, escribe
@@ -43,8 +43,8 @@ function OfframpPrivacy() {
       </p>
       <p>
         Para qué: verificar tu identidad, comprobar que la cuenta Bre-B es
-        tuya, prestarte el servicio de off-ramp cuando se active y avisarte
-        por correo de su activación. Estos datos no se usan para publicidad
+        tuya, prestarte el servicio de off-ramp y enviarte por correo tu
+        dirección de liquidación. Estos datos no se usan para publicidad
         de terceros ni se venden.
       </p>
       <p>
@@ -79,13 +79,13 @@ export default function PrivacidadPage() {
         title="Privacidad"
         lead={
           offramp
-            ? "El hub digitalcop.shop es un sitio informativo. Solo pedimos datos personales si te preinscribes al off-ramp a llaves Bre-B."
+            ? "El hub digitalcop.shop es un sitio informativo. Solo pedimos datos personales si te registras al off-ramp a llaves Bre-B."
             : "El hub digitalcop.shop es un sitio informativo. No pedimos crear una cuenta en esta web."
         }
       >
         <p>
           {offramp
-            ? "Fuera de la preinscripción al off-ramp, este sitio no tiene formulario de registro."
+            ? "Fuera del off-ramp, este sitio no tiene formulario de registro."
             : "Esta página no tiene formulario de registro."}{" "}
           Si activamos
           analítica (por ejemplo Google Analytics, cuando exista

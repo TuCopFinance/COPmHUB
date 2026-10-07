@@ -3,6 +3,13 @@ export type FaqItem = {
   answer: string;
 };
 
+/** Shown on the home page only while the off-ramp is enabled. */
+export const OFFRAMP_FAQ: FaqItem = {
+  question: "¿Puedo retirar a pesos en mi cuenta bancaria?",
+  answer:
+    "Sí, con el off-ramp a llaves Bre-B que opera TuCOP. Verificas tu identidad una vez, registras una llave Bre-B a tu nombre y recibes una dirección de liquidación propia. Este hub solo aloja el formulario: no custodia fondos ni guarda tus datos. La comisión y el mínimo por envío se muestran al activar.",
+};
+
 export const HOME_FAQ: FaqItem[] = [
   {
     question: "¿Qué es DigitalCOP?",
