@@ -19,6 +19,8 @@ const MESSAGES: Record<string, string> = {
   invalid_key: "Escribe una llave Bre-B válida.",
   destination_rejected:
     "No pudimos validar esa llave Bre-B a tu nombre. Revisa que esté bien escrita y que la cuenta sea tuya: no se aceptan cuentas de terceros.",
+  destination_validation_timeout:
+    "El banco aún no responde por esa llave. Espera un minuto e intenta de nuevo.",
   already_verified: "Ya registraste tu llave Bre-B.",
   nothing_to_confirm: "No hay una llave por confirmar.",
 };

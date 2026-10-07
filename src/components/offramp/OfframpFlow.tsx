@@ -21,6 +21,16 @@ type Destination = {
   document_last4: string | null;
 };
 
+type Offramp = {
+  address: string;
+  chain: string;
+  currency: string;
+  token_address: string;
+  destination_currency: string;
+  developer_fee_percent: string;
+  min_payout_cop: number;
+};
+
 type State =
   | "signed_out"
   | "new"
@@ -39,6 +49,7 @@ type Status = {
   kyc_status?: string | null;
   tos_status?: string | null;
   destination?: Destination | null;
+  offramp?: Offramp | null;
 };
 
 const SIGNED_OUT: Status = { state: "signed_out" };
@@ -174,6 +185,7 @@ export function OfframpFlow({
   const [documentNumber, setDocumentNumber] = useState("");
   const [consent, setConsent] = useState(false);
   const [breBKey, setBreBKey] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const token = useRef<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -230,8 +242,11 @@ export function OfframpFlow({
     };
   }, [call]);
 
-  // While Bridge reviews the identity, poll so the page moves on by itself.
-  const waiting = status?.state === "kyc_pending";
+  // While Bridge reviews the identity, or while the withdrawal address is
+  // still being created, poll so the page moves on by itself.
+  const waiting =
+    status?.state === "kyc_pending" ||
+    (status?.state === "destination_verified" && !status.offramp);
   useEffect(() => {
     if (!waiting) return;
     const timer = window.setInterval(() => {
@@ -299,17 +314,31 @@ export function OfframpFlow({
 
   const saveKey = () =>
     run(async () => {
+      // The Bre-B directory answers after a wait; say so, or it looks stuck.
+      setNotice("Estamos validando tu llave con el banco. Puede tardar hasta un minuto y medio: no cierres esta página.");
       const next = await call<Status>("POST", "/destination", {
         bre_b_key: breBKey,
       });
       setBreBKey("");
+      setNotice(null);
       advance(next);
     });
+
+  const copyAddress = async (address: string) => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setError("No pudimos copiar la dirección. Selecciónala y cópiala a mano.");
+    }
+  };
 
   const confirmKey = (accept: boolean) =>
     run(async () => {
       const next = await call<Status>("POST", "/destination/confirm", { accept });
       if (accept) track("offramp_preregistered", { section: "offramp" });
+      if (accept && next.offramp) track("offramp_activated", { section: "offramp" });
       advance(next);
     });
 
@@ -629,22 +658,101 @@ export function OfframpFlow({
           </>
         ) : null}
 
-        {state === "destination_verified" ? (
+        {state === "destination_verified" && status.offramp ? (
           <>
             <p className="text-xs font-bold uppercase tracking-wide text-[#137211]">
-              Preinscrito
+              Activo
             </p>
             <h2
               ref={headingRef}
               tabIndex={-1}
               className={headingClass + " mt-2"}
             >
-              Ya estás preinscrito
+              Tu off-ramp ya está habilitado
             </h2>
             <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
-              Te avisamos por correo a{" "}
-              <strong className="text-ink">{status.email}</strong> cuando
-              activemos los retiros. No tienes que hacer nada más.
+              Esta es tu dirección de liquidación. Todo lo que envíes aquí se
+              convierte a pesos y llega a tu llave Bre-B
+              {status.destination?.key_masked ? (
+                <>
+                  {" "}
+                  <strong className="text-ink">
+                    {status.destination.key_masked}
+                    {status.destination.bank
+                      ? ` (${status.destination.bank})`
+                      : ""}
+                  </strong>
+                </>
+              ) : null}
+              , normalmente en unos minutos.
+            </p>
+
+            <div
+              className="mt-6 rounded-2xl border-2 border-co-red bg-[#fdf1f2] p-5"
+              role="note"
+            >
+              <p className="text-lg font-extrabold uppercase leading-snug tracking-tight text-co-red sm:text-2xl">
+                Solo recibe USDC en la red Celo
+              </p>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-ink">
+                No envíes otro token ni uses otra red. Lo que llegue distinto a
+                USDC en Celo se puede perder y no lo podemos recuperar.
+              </p>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-line bg-bg p-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                Tu dirección de liquidación
+              </p>
+              <p className="mt-2 break-all font-mono text-[15px] font-bold text-ink">
+                {status.offramp.address}
+              </p>
+              <button
+                type="button"
+                onClick={() => copyAddress(status.offramp!.address)}
+                className={primaryClass + " mt-4"}
+              >
+                {copied ? "Copiada" : "Copiar dirección"}
+              </button>
+            </div>
+
+            <dl className="mt-5 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
+              <dt className="text-muted">Token</dt>
+              <dd className="font-semibold text-ink">USDC</dd>
+              <dt className="text-muted">Red</dt>
+              <dd className="font-semibold text-ink">Celo</dd>
+              <dt className="text-muted">Contrato de USDC</dt>
+              <dd className="break-all font-mono text-[13px] font-semibold text-ink">
+                {status.offramp.token_address}
+              </dd>
+              <dt className="text-muted">Mínimo por envío</dt>
+              <dd className="font-semibold text-ink">
+                el equivalente a{" "}
+                {status.offramp.min_payout_cop.toLocaleString("es-CO")} COP
+              </dd>
+              <dt className="text-muted">Comisión</dt>
+              <dd className="font-semibold text-ink">
+                {status.offramp.developer_fee_percent}% más la tasa de cambio
+                del momento
+              </dd>
+            </dl>
+
+            <p className="mt-5 max-w-prose text-sm leading-relaxed text-muted">
+              La dirección es siempre la misma: guárdala y úsala cuando
+              quieras. También te la enviamos a{" "}
+              <strong className="text-ink">{status.email}</strong>. Haz primero
+              un envío pequeño para confirmar que llega.
+            </p>
+          </>
+        ) : null}
+
+        {state === "destination_verified" && !status.offramp ? (
+          <>
+            {heading("Estamos activando tu off-ramp")}
+            <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted" role="status">
+              Tu llave Bre-B quedó registrada. Estamos creando tu dirección de
+              liquidación; esta página se actualiza sola en cuanto esté lista.
+              Si cierras, vuelve con tu correo y la verás aquí.
             </p>
             {status.destination ? (
               <p className="mt-4 text-sm text-muted">

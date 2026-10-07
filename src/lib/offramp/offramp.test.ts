@@ -62,6 +62,7 @@ describe("off-ramp error messages", () => {
       "invalid_document",
       "document_already_registered",
       "destination_rejected",
+      "destination_validation_timeout",
       "rate_limited_email",
     ]) {
       expect(offrampErrorMessage(code)).not.toBe(GENERIC_ERROR);
