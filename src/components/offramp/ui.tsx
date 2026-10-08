@@ -80,7 +80,15 @@ export function Stepper({ current }: { current: number }) {
   );
 }
 
-export function StatusLine({ label, done }: { label: string; done: boolean }) {
+export function StatusLine({
+  label,
+  done,
+  reviewing = false,
+}: {
+  label: string;
+  done: boolean;
+  reviewing?: boolean;
+}) {
   return (
     <span className="flex items-center gap-2 text-sm">
       <span
@@ -89,7 +97,9 @@ export function StatusLine({ label, done }: { label: string; done: boolean }) {
       />
       <span className="text-muted">
         {label}:{" "}
-        <strong className="text-ink">{done ? "Listo" : "Pendiente"}</strong>
+        <strong className="text-ink">
+          {done ? "Listo" : reviewing ? "En revisión" : "Pendiente"}
+        </strong>
       </span>
     </span>
   );

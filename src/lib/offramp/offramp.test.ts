@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isOfframpEnabled, missingOfframpEnv, offrampConfig } from "./config";
 import { OFFRAMP_COPY } from "./copy";
+import { normalizeBreBKey } from "./breb";
 import {
   DOCUMENT_TYPES,
   GENERIC_ERROR,
@@ -86,5 +87,20 @@ describe("off-ramp error messages", () => {
       "TI",
       "NUIP",
     ]);
+  });
+});
+
+describe("Bre-B key input", () => {
+  it("adds the @ to an alphanumeric key typed without it", () => {
+    expect(normalizeBreBKey("juanperez")).toBe("@juanperez");
+    expect(normalizeBreBKey(" juan perez1 ")).toBe("@juanperez1");
+  });
+  it("leaves keys that already have an @, emails, phones and documents alone", () => {
+    expect(normalizeBreBKey("@juanperez")).toBe("@juanperez");
+    expect(normalizeBreBKey("juan@correo.com")).toBe("juan@correo.com");
+    expect(normalizeBreBKey("300 123 4567")).toBe("3001234567");
+    expect(normalizeBreBKey("+573001234567")).toBe("+573001234567");
+    expect(normalizeBreBKey("1020304050")).toBe("1020304050");
+    expect(normalizeBreBKey("")).toBe("");
   });
 });
