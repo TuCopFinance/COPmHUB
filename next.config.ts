@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { BRIDGE_FRAME_ORIGINS, BRIDGE_KYC_ORIGIN } from "./src/lib/offramp/embed";
 
 const CANONICAL_HOST = "digitalcop.shop";
 
@@ -15,6 +16,14 @@ function originOf(value: string | undefined): string | null {
 // allowed in connect-src. Read at build time, like the feature flag itself.
 const offrampApi = originOf(process.env.OFFRAMP_API_URL);
 const isDev = process.env.NODE_ENV !== "production";
+
+// The off-ramp form shows Bridge's terms and identity pages in frames, and the
+// identity check needs the camera. Both stay closed while the form is off.
+const offrampOn = process.env.OFFRAMP_ENABLED === "true" && offrampApi !== null;
+const frameSrc = offrampOn ? BRIDGE_FRAME_ORIGINS.join(" ") : "'none'";
+// `self` is needed too: a browser only hands the camera to a frame from a
+// document that is itself allowed to use it.
+const camera = offrampOn ? `(self "${BRIDGE_KYC_ORIGIN}")` : "()";
 
 const csp = [
   "default-src 'self'",
@@ -34,7 +43,7 @@ const csp = [
   ]
     .filter(Boolean)
     .join(" "),
-  "frame-src 'none'",
+  `frame-src ${frameSrc}`,
   "frame-ancestors 'none'",
   "object-src 'none'",
   "base-uri 'self'",
@@ -53,7 +62,7 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    value: `camera=${camera}, microphone=(), geolocation=(), payment=(), usb=()`,
   },
 ];
 

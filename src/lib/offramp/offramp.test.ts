@@ -3,6 +3,14 @@ import { isOfframpEnabled, missingOfframpEnv, offrampConfig } from "./config";
 import { OFFRAMP_COPY } from "./copy";
 import { normalizeBreBKey } from "./breb";
 import {
+  BRIDGE_KYC_ORIGIN,
+  BRIDGE_TOS_ORIGIN,
+  embeddedKycUrl,
+  embeddedTosUrl,
+  isKycFinished,
+  isTosAccepted,
+} from "./embed";
+import {
   DOCUMENT_TYPES,
   GENERIC_ERROR,
   offrampErrorMessage,
@@ -102,5 +110,56 @@ describe("Bre-B key input", () => {
     expect(normalizeBreBKey("+573001234567")).toBe("+573001234567");
     expect(normalizeBreBKey("1020304050")).toBe("1020304050");
     expect(normalizeBreBKey("")).toBe("");
+  });
+});
+
+describe("bridge pages inside the form", () => {
+  const tos =
+    "https://compliance.bridge.xyz/accept-terms-of-service?customer_id=c1&developer_id=d1&redirect_uri=https%3A%2F%2Fdigitalcop.shop%2Fofframp";
+  const kyc =
+    "https://bridge.withpersona.com/verify?fields%5Biqt_token%5D=tok&inquiry-template-id=itmpl_1&redirect-uri=https%3A%2F%2Fdigitalcop.shop%2Fofframp&reference-id=c1";
+
+  it("frames the terms page without the redirect, so it answers by postMessage", () => {
+    const url = new URL(embeddedTosUrl(tos)!);
+    expect(url.origin).toBe(BRIDGE_TOS_ORIGIN);
+    expect(url.searchParams.has("redirect_uri")).toBe(false);
+    expect(url.searchParams.get("customer_id")).toBe("c1");
+    expect(url.searchParams.get("developer_id")).toBe("d1");
+  });
+
+  it("frames the identity check as Bridge documents it", () => {
+    const url = new URL(embeddedKycUrl(kyc, "https://digitalcop.shop")!);
+    expect(url.origin).toBe(BRIDGE_KYC_ORIGIN);
+    expect(url.pathname).toBe("/widget");
+    expect(url.searchParams.get("iframe-origin")).toBe("https://digitalcop.shop");
+    expect(url.searchParams.has("redirect-uri")).toBe(false);
+    expect(url.searchParams.get("fields[iqt_token]")).toBe("tok");
+    expect(url.searchParams.get("reference-id")).toBe("c1");
+    expect(url.searchParams.get("language")).toBe("es");
+  });
+
+  it("does not frame a link on a host it does not know", () => {
+    expect(embeddedTosUrl("https://dashboard.bridge.xyz/accept-terms-of-service?t=1")).toBeNull();
+    expect(embeddedTosUrl(kyc)).toBeNull();
+    expect(embeddedKycUrl(tos, "https://digitalcop.shop")).toBeNull();
+    expect(embeddedKycUrl("https://bridge.withpersona.com/other?x=1", "https://digitalcop.shop")).toBeNull();
+    expect(embeddedKycUrl("https://bridge.withpersona.com.evil.example/verify", "https://digitalcop.shop")).toBeNull();
+    expect(embeddedTosUrl("not a url")).toBeNull();
+    expect(embeddedTosUrl(null)).toBeNull();
+    expect(embeddedKycUrl(undefined, "https://digitalcop.shop")).toBeNull();
+  });
+
+  it("only trusts messages from Bridge's own pages", () => {
+    const accepted = { signedAgreementId: "a1" };
+    expect(isTosAccepted({ origin: BRIDGE_TOS_ORIGIN, data: accepted })).toBe(true);
+    expect(isTosAccepted({ origin: "https://evil.example", data: accepted })).toBe(false);
+    expect(isTosAccepted({ origin: BRIDGE_TOS_ORIGIN, data: { signedAgreementId: "" } })).toBe(false);
+    expect(isTosAccepted({ origin: BRIDGE_TOS_ORIGIN, data: null })).toBe(false);
+    expect(isTosAccepted({ origin: BRIDGE_TOS_ORIGIN, data: "accepted" })).toBe(false);
+
+    expect(isKycFinished({ origin: BRIDGE_KYC_ORIGIN, data: { name: "complete" } })).toBe(true);
+    expect(isKycFinished({ origin: BRIDGE_KYC_ORIGIN, data: { name: "load" } })).toBe(false);
+    expect(isKycFinished({ origin: "https://evil.example", data: { name: "complete" } })).toBe(false);
+    expect(isKycFinished({ origin: BRIDGE_KYC_ORIGIN, data: null })).toBe(false);
   });
 });

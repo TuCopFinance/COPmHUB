@@ -9,6 +9,12 @@ import {
   offrampErrorMessage,
 } from "@/lib/offramp/messages";
 import { normalizeBreBKey } from "@/lib/offramp/breb";
+import {
+  embeddedKycUrl,
+  embeddedTosUrl,
+  isKycFinished,
+  isTosAccepted,
+} from "@/lib/offramp/embed";
 import { markOfframpPopupSeen } from "@/components/offramp/popupStorage";
 import {
   readSessionToken,
@@ -136,8 +142,8 @@ export function OfframpFlow({
     };
   }, [waiting, call]);
 
-  // Set once the person opens a Bridge page, so the KYC step can say it is
-  // waiting for Bridge instead of looking stuck.
+  // Set once the person opens a Bridge page in another tab, so the KYC step
+  // can say it is waiting for Bridge instead of looking stuck.
   const [openedBridge, setOpenedBridge] = useState(false);
   const [checking, setChecking] = useState(false);
   const checkNow = () => {
@@ -146,6 +152,30 @@ export function OfframpFlow({
       .then(setStatus, () => {})
       .finally(() => setChecking(false));
   };
+
+  // Bridge's pages are framed in the KYC step and report back with
+  // postMessage. The flags move the step on at once; TuCOPRamp, reading
+  // Bridge, still decides the real status on the next poll.
+  const [termsAcceptedHere, setTermsAcceptedHere] = useState(false);
+  const [identitySentHere, setIdentitySentHere] = useState(false);
+  const inKyc = status?.state === "kyc_pending";
+  useEffect(() => {
+    if (!inKyc) return;
+    const onMessage = (event: MessageEvent) => {
+      if (isTosAccepted(event)) {
+        setTermsAcceptedHere(true);
+        track("offramp_terms_accepted", { section: "offramp" });
+      } else if (isKycFinished(event)) {
+        setIdentitySentHere(true);
+        track("offramp_identity_submitted", { section: "offramp" });
+      } else {
+        return;
+      }
+      call<Status>("GET", "/me").then(setStatus, () => {});
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [inKyc, call]);
 
   // Bridge sends the person back to this page in the tab it opened, which
   // has no session. Recognise that landing so it can point them back.
@@ -260,7 +290,8 @@ export function OfframpFlow({
 
   const identityDone =
     status?.kyc_status === "approved" || status?.kyc_status === "active";
-  const termsDone = status?.tos_status === "approved";
+  const termsDone = status?.tos_status === "approved" || termsAcceptedHere;
+  const identityReviewing = status?.kyc_status === "under_review";
 
   if (!status) {
     return (
@@ -448,48 +479,60 @@ export function OfframpFlow({
           <>
             {heading("Verifica tu identidad")}
             <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
-              Son dos pasos en la página segura de Bridge, nuestro proveedor.
-              Ten a la mano tu documento. Puedes cerrar esta página y volver
-              después con tu correo: tu avance queda guardado.
+              Son dos pasos con Bridge, nuestro proveedor, y los haces aquí
+              mismo. Ten a la mano tu documento. Puedes cerrar esta página y
+              volver después con tu correo: tu avance queda guardado.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              {status.kyc_link ? (
-                <a
-                  href={status.kyc_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={primaryClass}
-                  onClick={() => setOpenedBridge(true)}
-                >
-                  Verificar identidad
-                </a>
-              ) : null}
-              {status.tos_link && status.tos_status !== "approved" ? (
-                <a
-                  href={status.tos_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={secondaryClass}
-                  onClick={() => setOpenedBridge(true)}
-                >
-                  Aceptar términos
-                </a>
-              ) : null}
-            </div>
-            <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
+            <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2">
+              <StatusLine label="Términos" done={termsDone} />
               <StatusLine
                 label="Identidad"
                 done={identityDone}
-                reviewing={status.kyc_status === "under_review"}
+                reviewing={identityReviewing || identitySentHere}
               />
-              <StatusLine label="Términos" done={termsDone} />
             </div>
+
+            {!termsDone && status.tos_link ? (
+              <BridgeStep
+                title="1. Acepta los términos de Bridge"
+                body="La página de Bridge está en inglés. Al pulsar “Accept” aceptas sus Términos de Servicio y su Política de Privacidad."
+                frameTitle="Términos de Bridge"
+                src={embeddedTosUrl(status.tos_link)}
+                link={status.tos_link}
+                linkLabel="Aceptar términos"
+                help="¿No carga?"
+                height={480}
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+                onOpenTab={() => setOpenedBridge(true)}
+              />
+            ) : null}
+
+            {termsDone &&
+            !identityDone &&
+            !identityReviewing &&
+            !identitySentHere &&
+            status.kyc_link ? (
+              <BridgeStep
+                title="2. Verifica tu identidad"
+                body="Bridge te pide una foto de tu documento y una selfie. Cuando el navegador pregunte, permite el uso de la cámara."
+                frameTitle="Verificación de identidad de Bridge"
+                src={embeddedKycUrl(status.kyc_link, window.location.origin)}
+                link={status.kyc_link}
+                linkLabel="Verificar identidad"
+                help="¿No carga o no te deja usar la cámara?"
+                height={680}
+                allow="camera"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-top-navigation-by-user-activation"
+                onOpenTab={() => setOpenedBridge(true)}
+              />
+            ) : null}
+
             {identityDone && termsDone ? (
               <WaitPanel
                 title="Ya casi: estamos habilitando tu cuenta"
                 body="Tu identidad y los términos están listos. Bridge está terminando de activar tu cuenta para Colombia; suele tardar menos de un minuto. No cierres esta página: avanza sola."
               />
-            ) : status.kyc_status === "under_review" ? (
+            ) : identityReviewing || identitySentHere ? (
               <WaitPanel
                 title="Bridge está revisando tu identidad"
                 body="Puede tardar unos minutos. Puedes dejar esta página abierta, avanza sola, o cerrarla y volver más tarde con tu correo."
@@ -499,21 +542,28 @@ export function OfframpFlow({
                 title="Esperando tu verificación en Bridge"
                 body="Completa los pasos en la pestaña de Bridge que se abrió. Cuando termines, vuelve aquí: esta página se actualiza sola en unos segundos. La pestaña de Bridge la puedes cerrar."
               />
-            ) : (
-              <p className="mt-4 text-sm text-muted" role="status">
-                Haz los dos pasos y vuelve a esta pestaña: se actualiza sola.
-              </p>
-            )}
-            {openedBridge || status.kyc_status === "under_review" || (identityDone && termsDone) ? (
-              <button
-                type="button"
-                onClick={checkNow}
-                disabled={checking}
-                className={secondaryClass + " mt-4"}
-              >
-                {checking ? "Revisando..." : "Ya terminé, revisar ahora"}
-              </button>
             ) : null}
+            <div className="mt-4 flex flex-wrap gap-3">
+              {openedBridge || identityReviewing || identitySentHere || (identityDone && termsDone) ? (
+                <button
+                  type="button"
+                  onClick={checkNow}
+                  disabled={checking}
+                  className={secondaryClass}
+                >
+                  {checking ? "Revisando..." : "Ya terminé, revisar ahora"}
+                </button>
+              ) : null}
+              {identitySentHere && !identityReviewing && !identityDone ? (
+                <button
+                  type="button"
+                  onClick={() => setIdentitySentHere(false)}
+                  className={secondaryClass}
+                >
+                  Abrir la verificación otra vez
+                </button>
+              ) : null}
+            </div>
           </>
         ) : null}
 
@@ -768,6 +818,79 @@ export function OfframpFlow({
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * One of Bridge's pages inside the form. When the link is not one this site
+ * can frame, or the frame does not load for the person, the same page opens
+ * in a new tab as it always did.
+ */
+function BridgeStep({
+  title,
+  body,
+  frameTitle,
+  src,
+  link,
+  linkLabel,
+  help,
+  height,
+  sandbox,
+  allow,
+  onOpenTab,
+}: {
+  title: string;
+  body: string;
+  frameTitle: string;
+  src: string | null;
+  link: string;
+  linkLabel: string;
+  help: string;
+  height: number;
+  sandbox: string;
+  allow?: string;
+  onOpenTab: () => void;
+}) {
+  return (
+    <section className="mt-6">
+      <h3 className="text-base font-extrabold tracking-tight text-ink">{title}</h3>
+      <p className="mt-1 max-w-prose text-sm leading-relaxed text-muted">{body}</p>
+      {src ? (
+        <>
+          <iframe
+            src={src}
+            title={frameTitle}
+            allow={allow}
+            sandbox={sandbox}
+            style={{ height }}
+            className="mt-4 w-full rounded-2xl border border-line bg-white"
+          />
+          <p className="mt-3 text-sm text-muted">
+            {help}{" "}
+            <a
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-brand underline"
+              onClick={onOpenTab}
+            >
+              Ábrelo en una pestaña nueva
+            </a>
+            .
+          </p>
+        </>
+      ) : (
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={primaryClass + " mt-4"}
+          onClick={onOpenTab}
+        >
+          {linkLabel}
+        </a>
+      )}
+    </section>
   );
 }
 
