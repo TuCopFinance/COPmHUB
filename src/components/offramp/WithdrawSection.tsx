@@ -25,6 +25,7 @@ import {
   secondaryClass,
 } from "@/components/offramp/ui";
 import { WalletConfirm } from "@/components/offramp/WalletConfirm";
+import { PayoutList, QuoteCalculator } from "@/components/offramp/WithdrawTools";
 
 // The Bre-B directory answers in about a minute.
 const POLL_MS = 4000;
@@ -82,7 +83,13 @@ export function WithdrawSection({
   }, [load]);
 
   const destination = destinations ? currentDestination(destinations, withdrawals) : null;
-  const withdrawal = activeWithdrawal(withdrawals, destination?.id ?? null);
+  // Any active address is shown, even when its Bre-B key is not in the list
+  // (people who pre-registered before keep the address they already had).
+  const withdrawal =
+    activeWithdrawal(withdrawals, destination?.id ?? null) ?? activeWithdrawal(withdrawals, null);
+  const payoutKey = withdrawal
+    ? (destinations ?? []).find((d) => d.id === withdrawal.destination_id) ?? null
+    : null;
   // A key just refused keeps the form on screen with the reason, even when an
   // older key would otherwise be shown.
   const showForm =
@@ -153,7 +160,7 @@ export function WithdrawSection({
   const confirmKey = (id: string) =>
     run(async () => {
       const { data } = await ramp<Destination>("POST", `v1/destinations/${id}/confirm`, {});
-      track("offramp_preregistered", { section: "offramp" });
+      track("offramp_key_confirmed", { section: "offramp" });
       upsert(data);
     });
 
@@ -203,7 +210,7 @@ export function WithdrawSection({
     );
   }
 
-  if (withdrawal && destination) {
+  if (withdrawal) {
     const fee = feePercent(withdrawal.fee_bps);
     const minimum = formatCop(withdrawal.deposit.minimum_destination_amount?.amount);
     return (
@@ -212,11 +219,16 @@ export function WithdrawSection({
         <h2 className={headingClass + " mt-2"}>Tu off-ramp ya está habilitado</h2>
         <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
           Esta es tu dirección de liquidación. Todo lo que envíes aquí se convierte a pesos
-          y llega a tu llave Bre-B{" "}
-          <strong className="text-ink">
-            {destination.key_masked}
-            {destination.holder?.bank ? ` (${destination.holder.bank})` : ""}
-          </strong>
+          y llega a tu llave Bre-B
+          {payoutKey ? (
+            <>
+              {" "}
+              <strong className="text-ink">
+                {payoutKey.key_masked}
+                {payoutKey.holder?.bank ? ` (${payoutKey.holder.bank})` : ""}
+              </strong>
+            </>
+          ) : null}
           , normalmente en unos minutos.
         </p>
 
@@ -286,6 +298,8 @@ export function WithdrawSection({
           La dirección es siempre la misma: guárdala y úsala cuando quieras. Haz primero un
           envío pequeño para confirmar que llega.
         </p>
+        <QuoteCalculator withdrawal={withdrawal} onSessionExpired={onSessionExpired} />
+        <PayoutList withdrawalId={withdrawal.id} onSessionExpired={onSessionExpired} />
         {errorLine}
       </>
     );

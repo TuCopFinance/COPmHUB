@@ -49,14 +49,19 @@ public/
 
 `/offramp` registers a person as a direct client of TuCOP Ramp without leaving the hub: confirm an email with a one-time code, enter their name and identity document, complete Bridge's terms and identity check inside the page, then register their own Bre-B key. Once the key is confirmed the person gets a liquidation address (USDC on Celo in, pesos to their key out) and, separately, a Bre-B key to buy USDC with pesos (on-ramp). Someone who registered before signs in with the same email and sees what they already have; nothing is created twice.
 
-The service is operated by TuCOP. The form calls only this site: `src/app/api/ramp/[...path]/route.ts` relays an allowlist of TuCOPRamp platform calls (`/v1/sessions`, `/v1/parties`, `/v1/destinations`, `/v1/withdrawals`, `/v1/deposits`, `/v1/document-types`) with TuCOP Ramp's integrator key, which stays on the server. The party session token lives in an httpOnly cookie and never reaches client code. Each call carries the person's address in `X-TuCOPRamp-Client-IP`, taken from `X-Real-IP`, which Railway's edge sets and overwrites (never from `X-Forwarded-For`), so TuCOPRamp's per-IP limits apply per person rather than to the hub's server. The relay does not store or log request or response bodies. The site has no database.
+The service is operated by TuCOP. The form calls only this site: `src/app/api/ramp/[...path]/route.ts` relays an allowlist of TuCOPRamp platform calls (`/v1/sessions`, `/v1/parties`, `/v1/destinations`, `/v1/withdrawals`, `/v1/deposits`, `/v1/document-types`) with TuCOP Ramp's integrator key, which stays on the server. The party session token lives in an httpOnly cookie and never reaches client code. Each call carries the person's address in `X-TuCOPRamp-Client-IP`, taken from `X-Real-IP`, which Railway's edge sets and overwrites (never from `X-Forwarded-For`), so TuCOPRamp's per-IP limits apply per person rather than to the hub's server. POSTs carry an `Idempotency-Key` the page keeps for that action until it gets a final answer, so retrying after a dropped connection does not create anything twice. The relay does not store or log request or response bodies. The site has no database.
+
+Selling USDC: the person registers their own Bre-B key, gets a reusable withdrawal address, can quote how much USDC to send for a given amount of pesos (`/v1/quotes`) and sees their payouts (`/v1/withdrawals/{id}`). Buying USDC (`/v1/deposits`) is built but hidden unless `ONRAMP_ENABLED=true`, until TuCOP confirms Bridge has enabled it.
+
+Webhooks: `src/app/api/webhooks/tucopramp/route.ts` receives the integrator's events, verifying the Standard Webhooks signature over the raw body (5-minute window) with `TUCOPRAMP_WEBHOOK_SECRET`. Every event of the integrator arrives, including clients of ramp.tucop.xyz; the site keeps no client list, so a verified event is acknowledged with 200 and only its type and id are logged.
 
 ```text
 src/app/offramp/          the page
 src/app/api/ramp/         the relay to TuCOPRamp (allowlist, session cookie)
+src/app/api/webhooks/     TuCOPRamp webhook receiver
 src/components/offramp/   flow, off-ramp and on-ramp steps, wallet input, promo, pop-up
 src/lib/offramp/          flag + config, copy, error messages, wallet checks
-src/lib/ramp/             allowlist and relay logic (tested without Next)
+src/lib/ramp/             allowlist, relay and webhook signature logic (tested without Next)
 ```
 
 The card on the home page, the pop-up, the page and the relay stay off unless `OFFRAMP_ENABLED=true` and the variables in [`.env.example`](./.env.example) are set. The home and privacy pages are static, so the flag is read at build time; changing it needs a redeploy. `next.config.ts` redirects `www` to the apex domain, which is the return URL TuCOP has on file for identity verification.

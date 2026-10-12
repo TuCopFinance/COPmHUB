@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { IntentLayout } from "@/components/IntentLayout";
 import { JsonLd } from "@/components/JsonLd";
-import { isOfframpEnabled, offrampConfig } from "@/lib/offramp/config";
+import { isOfframpEnabled, isOnrampEnabled, offrampConfig } from "@/lib/offramp/config";
 import { pageMetadata, webPageJsonLd } from "@/lib/seo";
 import { LEGAL_PAGES } from "@/lib/site";
 
@@ -11,6 +11,7 @@ export const metadata: Metadata = pageMetadata(page);
 
 function OfframpPrivacy() {
   const { dataController, privacyContact } = offrampConfig();
+  const onramp = isOnrampEnabled();
   return (
     <>
       <h2
@@ -42,14 +43,14 @@ function OfframpPrivacy() {
         de tu documento (cifrado), la fecha en que diste tu autorización, el
         estado de tu verificación, de tu cuenta Bre-B solo el banco, el
         nombre del titular y los últimos cuatro caracteres de la llave y del
-        documento, y las direcciones de billetera que registres para
-        recibir USDC o para que te devuelvan un pago fallido. No guarda tus
+        documento, y las direcciones de billetera que registres para que te
+        devuelvan un pago fallido{onramp ? " o para recibir USDC" : ""}. No guarda tus
         fotos ni tu llave Bre-B completa.
       </p>
       <p>
         Para qué: verificar tu identidad, comprobar que la cuenta Bre-B es
-        tuya y prestarte los servicios de retiro (off-ramp) y depósito
-        (on-ramp) en pesos. Estos datos no se usan para publicidad
+        tuya y prestarte el servicio de retiro (off-ramp)
+        {onramp ? " y el de depósito (on-ramp)" : ""} en pesos. Estos datos no se usan para publicidad
         de terceros ni se venden.
       </p>
       <p>

@@ -34,7 +34,14 @@ export type ProxyRequest = {
    * value the browser can set (such as its own X-Forwarded-For).
    */
   clientIp: string | null;
+  /**
+   * Idempotency-Key the page chose for this action. The page sends the same
+   * key when it retries the same action, so the ramp does it once.
+   */
+  idempotencyKey: string | null;
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type ProxyResponse = {
   status: number;
@@ -144,7 +151,10 @@ export async function proxyRampRequest(
     if (json === null) return problem(400, "invalid_json", "The body must be a JSON object.");
     body = json;
     headers["Content-Type"] = "application/json";
-    if (route.idempotent) headers["Idempotency-Key"] = deps.randomUUID();
+    if (route.idempotent) {
+      const key = req.idempotencyKey?.trim();
+      headers["Idempotency-Key"] = key && UUID.test(key) ? key.toLowerCase() : deps.randomUUID();
+    }
   }
 
   if (route.session === "use") {

@@ -10,6 +10,7 @@ import {
 
 const KEY = "tcr_live_sk_example.secret";
 const DST = "dst_01j9z3k8q2m4n6p8r0s2t4v6w8";
+const WDR = "wdr_01j9z3k8q2m4n6p8r0s2t4v6w8";
 
 function request(over: Partial<ProxyRequest> = {}): ProxyRequest {
   return {
@@ -22,6 +23,7 @@ function request(over: Partial<ProxyRequest> = {}): ProxyRequest {
     host: "digitalcop.shop",
     fetchSite: "same-origin",
     clientIp: "181.49.12.34",
+    idempotencyKey: null,
     ...over,
   };
 }
@@ -59,6 +61,8 @@ describe("ramp allowlist", () => {
     expect(matchRampRoute("POST", ["v1", "destinations", DST, "confirm"])).not.toBeNull();
     expect(matchRampRoute("POST", ["v1", "withdrawals"])).not.toBeNull();
     expect(matchRampRoute("POST", ["v1", "deposits"])).not.toBeNull();
+    expect(matchRampRoute("GET", ["v1", "withdrawals", WDR])).not.toBeNull();
+    expect(matchRampRoute("POST", ["v1", "quotes"])?.idempotent).toBe(true);
   });
 
   it("refuses everything else", () => {
@@ -73,6 +77,9 @@ describe("ramp allowlist", () => {
     expect(matchRampRoute("GET", ["v1", "parties%2Fme"])).toBeNull();
     expect(matchRampRoute("GET", ["v1/parties/me"])).toBeNull();
     expect(matchRampRoute("GET", [])).toBeNull();
+    expect(matchRampRoute("GET", ["v1", "withdrawals", DST])).toBeNull();
+    expect(matchRampRoute("GET", ["v1", "quotes"])).toBeNull();
+    expect(matchRampRoute("POST", ["v1", "p2p", "offramp", "quote"])).toBeNull();
   });
 
   it("forwards only the query parameters a route lists", () => {
@@ -119,6 +126,25 @@ describe("ramp relay", () => {
     );
     expect(sent(g).headers["Idempotency-Key"]).toBeUndefined();
     expect(sent(g).headers["X-TuCOPRamp-Party-Session"]).toBeUndefined();
+  });
+
+  it("reuses the page's Idempotency-Key for a retried action, and only a UUID", async () => {
+    const key = "0b6c2f9e-3a41-4d7e-9c55-1f2e3d4c5b6a";
+    const post = { method: "POST", segments: ["v1", "withdrawals"], body: "{}" };
+    const f = upstream(201, {});
+    await proxyRampRequest(request({ ...post, idempotencyKey: key.toUpperCase() }), deps(f));
+    expect(sent(f).headers["Idempotency-Key"]).toBe(key);
+    for (const idempotencyKey of ["not-a-uuid", "", "0b6c2f9e3a414d7e9c551f2e3d4c5b6a"]) {
+      const g = upstream(201, {});
+      await proxyRampRequest(request({ ...post, idempotencyKey }), deps(g));
+      expect(sent(g).headers["Idempotency-Key"]).toBe("6f1c1a2e-1111-4222-8333-444455556666");
+    }
+    const h = upstream(202, {});
+    await proxyRampRequest(
+      request({ method: "POST", segments: ["v1", "sessions", "email-otp"], body: "{}", idempotencyKey: key }),
+      deps(h),
+    );
+    expect(sent(h).headers["Idempotency-Key"]).toBeUndefined();
   });
 
   it("keeps the session token out of the body and in an httpOnly cookie", async () => {

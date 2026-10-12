@@ -24,6 +24,7 @@ export type RampRoute = {
 
 // Public ids are a prefix plus 26 Crockford base32 characters.
 const DST = "dst_[0-9a-hjkmnp-tv-z]{26}";
+const WDR = "wdr_[0-9a-hjkmnp-tv-z]{26}";
 
 export const RAMP_ROUTES: readonly RampRoute[] = [
   { method: "POST", pattern: /^v1\/sessions\/email-otp$/, session: "none", idempotent: false },
@@ -48,6 +49,10 @@ export const RAMP_ROUTES: readonly RampRoute[] = [
   },
   { method: "GET", pattern: /^v1\/withdrawals$/, session: "use", idempotent: false },
   { method: "POST", pattern: /^v1\/withdrawals$/, session: "use", idempotent: true },
+  // The address with its payouts.
+  { method: "GET", pattern: new RegExp(`^v1/withdrawals/${WDR}$`, "i"), session: "use", idempotent: false },
+  // How much USDC to send so a given amount of pesos arrives. Only a price.
+  { method: "POST", pattern: /^v1\/quotes$/, session: "use", idempotent: true },
   { method: "GET", pattern: /^v1\/deposits$/, session: "use", idempotent: false },
   { method: "POST", pattern: /^v1\/deposits$/, session: "use", idempotent: true },
 ];

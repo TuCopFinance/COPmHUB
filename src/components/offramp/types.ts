@@ -45,6 +45,27 @@ export type Withdrawal = {
   };
   fee_bps: number | null;
   return_address: string | null;
+  /** Most recent first. Only on GET /v1/withdrawals/{id}. */
+  payouts?: Payout[];
+};
+
+export type Payout = {
+  id: string;
+  /** Bridge's state for the payout. */
+  status: string;
+  amount: Amount | null;
+  destination_amount: Amount | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A withdraw quote is only a price: send at least source_amount. */
+export type Quote = {
+  id: string;
+  destination_amount: Amount;
+  source_amount: Amount;
+  rate: { value: string };
+  expires_at: string;
 };
 
 export type Deposit = {

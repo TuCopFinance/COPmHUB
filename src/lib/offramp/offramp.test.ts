@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isOfframpEnabled,
+  isOnrampEnabled,
   missingOfframpEnv,
   offrampConfig,
   rampServerConfig,
@@ -38,6 +39,12 @@ describe("off-ramp config", () => {
     expect(isOfframpEnabled({ ...env, OFFRAMP_DATA_CONTROLLER: " " })).toBe(false);
     expect(isOfframpEnabled({ ...env, OFFRAMP_PRIVACY_CONTACT: undefined })).toBe(false);
     expect(isOfframpEnabled({})).toBe(false);
+  });
+
+  it("keeps buying USDC hidden unless both flags are on", () => {
+    expect(isOnrampEnabled(env)).toBe(false);
+    expect(isOnrampEnabled({ ...env, ONRAMP_ENABLED: "true" })).toBe(true);
+    expect(isOnrampEnabled({ ...env, OFFRAMP_ENABLED: "false", ONRAMP_ENABLED: "true" })).toBe(false);
   });
 
   it("only talks to the API over https, except on localhost", () => {
