@@ -88,7 +88,7 @@ export function clearedSessionCookie(): string {
  * A cross-site page must not be able to act with the person's cookie. A
  * browser sends Origin on every POST and DELETE, so one without it is refused.
  */
-function sameOrigin(req: ProxyRequest): boolean {
+function sameOrigin(req: Pick<ProxyRequest, "origin" | "host" | "fetchSite">): boolean {
   if (req.fetchSite && req.fetchSite !== "same-origin" && req.fetchSite !== "none") {
     return false;
   }
@@ -205,6 +205,58 @@ export async function proxyRampRequest(
     }
   }
   return response;
+}
+
+export type SignOutRequest = Pick<
+  ProxyRequest,
+  "sessionToken" | "origin" | "host" | "fetchSite" | "clientIp"
+>;
+
+/**
+ * Signs the person out: revokes the party session at TuCOPRamp
+ * (DELETE /v1/sessions/current), then drops the cookie. The cookie is dropped
+ * even when the ramp cannot be reached; a session left behind expires on its
+ * own within the hour.
+ */
+export async function signOutRampSession(
+  req: SignOutRequest,
+  deps: Pick<ProxyDeps, "config" | "fetch">,
+): Promise<ProxyResponse> {
+  if (!sameOrigin(req)) {
+    return problem(403, "forbidden_origin", "Requests must come from this site.");
+  }
+  const signedOut: ProxyResponse = {
+    status: 204,
+    body: "",
+    contentType: "application/json",
+    cookies: [clearedSessionCookie()],
+    retryAfter: null,
+  };
+  if (!req.sessionToken) return signedOut;
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "X-TuCOPRamp-Key": deps.config.apiKey,
+    "TuCOPRamp-Version": RAMP_API_VERSION,
+    "X-TuCOPRamp-Party-Session": req.sessionToken,
+  };
+  const clientIp = clientAddress(req.clientIp);
+  if (clientIp) headers["X-TuCOPRamp-Client-IP"] = clientIp;
+  try {
+    const upstream = await deps.fetch(`${deps.config.apiUrl}/v1/sessions/current`, {
+      method: "DELETE",
+      headers,
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+    if (!upstream.ok) {
+      console.error("[api:ramp] session revoke refused", { status: upstream.status });
+    }
+  } catch {
+    console.error("[api:ramp] upstream unreachable", { path: "v1/sessions/current" });
+  }
+  return signedOut;
 }
 
 /** Moves the session token from the body into the cookie. */

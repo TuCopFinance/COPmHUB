@@ -5,6 +5,7 @@ import {
   SESSION_COOKIE,
   clientAddress,
   proxyRampRequest,
+  signOutRampSession,
   type ProxyRequest,
 } from "./proxy";
 
@@ -249,6 +250,54 @@ describe("ramp relay", () => {
     expect(headers["Idempotency-Key"]).toBeUndefined();
     expect(headers["X-TuCOPRamp-Party-Session"]).toBe("tps_session");
     expect(res.status).toBe(204);
+  });
+
+  it("revokes the session at the ramp on sign-out, then drops the cookie", async () => {
+    const f = vi.fn(async () => new Response(null, { status: 204 }));
+    const res = await signOutRampSession(request(), deps(f as unknown as ReturnType<typeof upstream>));
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(url).toBe("https://api.ramp.tucop.xyz/v1/sessions/current");
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBeUndefined();
+    expect(headers["X-TuCOPRamp-Key"]).toBe(KEY);
+    expect(headers["TuCOPRamp-Version"]).toBe(RAMP_API_VERSION);
+    expect(headers["X-TuCOPRamp-Party-Session"]).toBe("tps_session");
+    expect(headers["X-TuCOPRamp-Client-IP"]).toBe("181.49.12.34");
+    expect(res.status).toBe(204);
+    expect(res.cookies).toHaveLength(1);
+    expect(res.cookies[0]).toContain(`${SESSION_COOKIE}=;`);
+    expect(res.cookies[0]).toContain("Max-Age=0");
+  });
+
+  it("drops the cookie on sign-out even when the ramp fails or there is no session", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const down = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const res = await signOutRampSession(request(), deps(down as unknown as ReturnType<typeof upstream>));
+    expect(res.status).toBe(204);
+    expect(res.cookies[0]).toContain("Max-Age=0");
+
+    const refused = upstream(500, { status: 500, code: "internal" });
+    expect((await signOutRampSession(request(), deps(refused))).cookies[0]).toContain("Max-Age=0");
+
+    const none = upstream(204, {});
+    const noSession = await signOutRampSession(request({ sessionToken: null }), deps(none));
+    expect(noSession.status).toBe(204);
+    expect(noSession.cookies[0]).toContain("Max-Age=0");
+    expect(none).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it("refuses a cross-site sign-out without calling the ramp", async () => {
+    const f = upstream(204, {});
+    for (const over of [{ origin: "https://evil.example" }, { origin: null }, { fetchSite: "cross-site" }]) {
+      const res = await signOutRampSession(request(over), deps(f));
+      expect(res.status).toBe(403);
+      expect(res.cookies).toHaveLength(0);
+    }
+    expect(f).not.toHaveBeenCalled();
   });
 
   it("only forwards JSON objects", async () => {
