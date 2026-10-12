@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { checkWalletPair, isWalletAddress, toChecksumAddress } from "./wallet";
 import { keccak256Hex } from "./keccak";
-import { activeDeposit, currentDestination, feePercent, formatCop, stageOf } from "./flow";
-import { offrampErrorMessage, GENERIC_ERROR } from "./messages";
+import {
+  activeDeposit,
+  currentDestination,
+  feePercent,
+  formatCop,
+  formatUsdc,
+  payoutPhase,
+  stageOf,
+} from "./flow";
+import { offrampErrorMessage, GENERIC_ERROR, isOfferedDocument } from "./messages";
 import type { Destination, Party, Withdrawal } from "@/components/offramp/types";
 
 describe("keccak-256", () => {
@@ -89,9 +97,9 @@ describe("flow state", () => {
     expect(stageOf(party({}, true))).toBe("restricted");
   });
 
-  it("keeps the key a withdrawal points at, then a confirmed key, then the newest", () => {
-    const a = destination("dst_a", { confirmed_at: "2026-10-10T00:00:00Z" });
-    const b = destination("dst_b");
+  it("keeps the key a withdrawal points at, then a verified key, then a pending one", () => {
+    const a = destination("dst_a");
+    const b = destination("dst_b", { status: "pending" });
     const third = destination("dst_c", { ownership: "third_party" });
     const w = { id: "wdr_x", status: "active", destination_id: "dst_a" } as Withdrawal;
     expect(currentDestination([b, a], [w])?.id).toBe("dst_a");
@@ -101,7 +109,26 @@ describe("flow state", () => {
     expect(currentDestination([destination("dst_r", { status: "rejected" })], [])).toBeNull();
   });
 
+  it("reads payouts as TuCOP Ramp maps Bridge's drain states", () => {
+    expect(payoutPhase("awaiting_funds")).toBe("waiting");
+    expect(payoutPhase("payment_submitted")).toBe("processing");
+    expect(payoutPhase("refund_in_flight")).toBe("processing");
+    expect(payoutPhase("payment_processed")).toBe("paid");
+    expect(payoutPhase("missing_return_policy")).toBe("failed");
+    expect(payoutPhase("refunded")).toBe("returned");
+    expect(payoutPhase("canceled")).toBe("canceled");
+    expect(payoutPhase("something_new")).toBe("processing");
+  });
+
+  it("never offers the tarjeta de identidad", () => {
+    expect(isOfferedDocument("TI")).toBe(false);
+    expect(isOfferedDocument("ti")).toBe(false);
+    expect(isOfferedDocument("CC")).toBe(true);
+  });
+
   it("formats the fee and amounts for Colombia", () => {
+    expect(formatUsdc("25.391500")).toBe("25,3915");
+    expect(formatUsdc(null)).toBeNull();
     expect(feePercent(150)).toBe("1,5");
     expect(feePercent(null)).toBeNull();
     expect(formatCop("4000.00")).toBe("4.000");
@@ -136,6 +163,9 @@ describe("error copy", () => {
       "rate_unavailable",
       "withdrawal_not_found",
       "idempotency_in_progress",
+      "party_not_linked",
+      "destination_in_use",
+      "destination_limit_reached",
     ]) {
       expect(offrampErrorMessage(code), code).not.toBe(GENERIC_ERROR);
     }

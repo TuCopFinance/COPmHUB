@@ -10,6 +10,7 @@ const MESSAGES: Record<string, string> = {
   party_session_required: "Tu sesión venció. Confirma tu correo de nuevo.",
   party_session_invalid: "Tu sesión venció. Confirma tu correo de nuevo.",
   party_required: "Primero completa tus datos.",
+  party_not_linked: "Debes autorizar de nuevo el tratamiento de tus datos para continuar.",
   // Registration
   invalid_name: "Escribe tu nombre completo, como aparece en tu documento.",
   invalid_document: "El número de documento no es válido para ese tipo de documento.",
@@ -33,6 +34,9 @@ const MESSAGES: Record<string, string> = {
   destination_not_verified:
     "Tu llave Bre-B aún se está validando. Espera un momento e intenta de nuevo.",
   destination_not_found: "No encontramos esa llave Bre-B. Regístrala de nuevo.",
+  destination_in_use:
+    "Esa llave ya tiene una dirección de liquidación activa, así que no se puede quitar. Escríbenos si necesitas cambiarla.",
+  destination_limit_reached: "Registraste muchas llaves este mes. Intenta más adelante.",
   // Wallet
   invalid_wallet_address: "Esa dirección de billetera no es válida.",
   invalid_return_address: "Esa dirección de billetera no es válida.",
@@ -44,6 +48,7 @@ const MESSAGES: Record<string, string> = {
   invalid_amount: "Escribe un monto válido en pesos.",
   rate_unavailable: "No pudimos consultar la tasa de cambio. Intenta de nuevo en unos minutos.",
   withdrawal_not_found: "No encontramos tu dirección de liquidación.",
+  deposit_not_found: "No encontramos tu llave de compra.",
   idempotency_in_progress: "Tu solicitud anterior aún se está procesando. Espera un momento.",
   // Provider
   provider_rejected:
@@ -74,12 +79,19 @@ export const DOCUMENT_LABELS: Record<string, string> = {
   NUIP: "NUIP",
 };
 
+/**
+ * Bridge onboards adults only, so the tarjeta de identidad (under 18) is
+ * never offered, even if the ramp still lists it.
+ */
+export function isOfferedDocument(code: string): boolean {
+  return code.toUpperCase() !== "TI";
+}
+
 /** Used until GET /v1/document-types answers, or if it does not. */
 export const DOCUMENT_TYPES = [
   { value: "CC", label: DOCUMENT_LABELS.CC },
   { value: "CE", label: DOCUMENT_LABELS.CE },
   { value: "PAS", label: DOCUMENT_LABELS.PAS },
-  { value: "TI", label: DOCUMENT_LABELS.TI },
   { value: "NUIP", label: DOCUMENT_LABELS.NUIP },
 ] as const;
 

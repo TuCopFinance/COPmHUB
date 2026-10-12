@@ -64,9 +64,9 @@ export function isOfframpEnabled(source: Source = process.env): boolean {
 }
 
 /**
- * Buying USDC with pesos (/v1/deposits) is built but stays hidden until TuCOP
- * confirms Bridge has enabled COP virtual accounts. Read per request on
- * /offramp; the static legal pages read it at build time.
+ * Buying USDC with pesos (/v1/deposits), behind its own flag so it can be
+ * turned on separately from the off-ramp. Read per request on /offramp; the
+ * static legal pages read it at build time.
  */
 export function isOnrampEnabled(source: Source = process.env): boolean {
   return isOfframpEnabled(source) && source.ONRAMP_ENABLED === "true";

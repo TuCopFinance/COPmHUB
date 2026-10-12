@@ -107,14 +107,8 @@ describe("off-ramp error messages", () => {
     expect(offrampErrorMessage("document_already_registered")).not.toMatch(/@/);
   });
 
-  it("offers personal documents only", () => {
-    expect(DOCUMENT_TYPES.map((type) => type.value)).toEqual([
-      "CC",
-      "CE",
-      "PAS",
-      "TI",
-      "NUIP",
-    ]);
+  it("offers adults' personal documents only", () => {
+    expect(DOCUMENT_TYPES.map((type) => type.value)).toEqual(["CC", "CE", "PAS", "NUIP"]);
   });
 });
 

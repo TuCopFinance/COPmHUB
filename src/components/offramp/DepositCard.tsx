@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { track } from "@/lib/analytics";
-import { activeDeposit, feePercent } from "@/lib/offramp/flow";
+import { activeDeposit, feePercent, formatCop, formatUsdc } from "@/lib/offramp/flow";
 import { GENERIC_ERROR, SESSION_CODES } from "@/lib/offramp/messages";
 import { RampError, ramp } from "@/components/offramp/api";
-import type { Deposit } from "@/components/offramp/types";
+import type { Deposit, DepositEvent } from "@/components/offramp/types";
 import { headingClass, primaryClass } from "@/components/offramp/ui";
 import { WalletConfirm } from "@/components/offramp/WalletConfirm";
 
@@ -119,6 +119,7 @@ export function DepositCard({ onSessionExpired }: { onSessionExpired: () => void
               {deposit.destination.address}
             </dd>
           </dl>
+          <DepositHistory depositId={deposit.id} />
           <p className="mt-5 max-w-prose text-sm leading-relaxed text-muted">
             Paga desde una cuenta bancaria a tu nombre. La llave es siempre la misma: úsala
             cada vez que quieras comprar. Haz primero un pago pequeño para confirmar que
@@ -147,6 +148,61 @@ export function DepositCard({ onSessionExpired }: { onSessionExpired: () => void
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function eventAmount(event: DepositEvent): string {
+  if (!event.amount) return "";
+  if (event.amount.asset === "COP") return `${formatCop(event.amount.amount) ?? event.amount.amount} COP`;
+  return `${formatUsdc(event.amount.amount) ?? event.amount.amount} ${event.amount.asset}`;
+}
+
+/** What has happened on the account: pesos received, USDC sent. */
+function DepositHistory({ depositId }: { depositId: string }) {
+  const [events, setEvents] = useState<DepositEvent[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    ramp<Deposit>("GET", `v1/deposits/${depositId}`).then(
+      ({ data }) => active && setEvents(data.events ?? []),
+      () => active && setEvents([]),
+    );
+    return () => {
+      active = false;
+    };
+  }, [depositId]);
+
+  if (events === null) return null;
+  return (
+    <div className="mt-6 max-w-xl">
+      <p className="text-sm font-semibold text-ink">Tus compras</p>
+      {events.length === 0 ? (
+        <p className="mt-2 text-sm text-muted">
+          Aún no has pagado a esta llave. Aparece aquí unos minutos después de que llegan
+          los pesos.
+        </p>
+      ) : (
+        <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-white text-sm">
+          {events.slice(0, 10).map((event) => (
+            <li key={event.id} className="flex flex-wrap justify-between gap-x-4 gap-y-1 px-4 py-3">
+              <span className="text-muted">
+                {event.created_at
+                  ? new Date(event.created_at).toLocaleDateString("es-CO", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : ""}
+              </span>
+              <span className="font-semibold text-ink">{eventAmount(event)}</span>
+              <span className="text-muted">
+                {event.amount?.asset === "COP" ? "Pesos recibidos" : "USDC enviado"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

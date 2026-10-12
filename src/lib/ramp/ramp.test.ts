@@ -5,6 +5,7 @@ import {
   SESSION_COOKIE,
   clientAddress,
   proxyRampRequest,
+  signOutRampSession,
   type ProxyRequest,
 } from "./proxy";
 
@@ -58,7 +59,8 @@ describe("ramp allowlist", () => {
     expect(matchRampRoute("GET", ["v1", "parties", "me"])).not.toBeNull();
     expect(matchRampRoute("POST", ["v1", "parties"])).not.toBeNull();
     expect(matchRampRoute("GET", ["v1", "destinations", DST])).not.toBeNull();
-    expect(matchRampRoute("POST", ["v1", "destinations", DST, "confirm"])).not.toBeNull();
+    expect(matchRampRoute("DELETE", ["v1", "destinations", DST])?.idempotent).toBe(false);
+    expect(matchRampRoute("GET", ["v1", "deposits", "dep_01j9z3k8q2m4n6p8r0s2t4v6w8"])).not.toBeNull();
     expect(matchRampRoute("POST", ["v1", "withdrawals"])).not.toBeNull();
     expect(matchRampRoute("POST", ["v1", "deposits"])).not.toBeNull();
     expect(matchRampRoute("GET", ["v1", "withdrawals", WDR])).not.toBeNull();
@@ -69,7 +71,8 @@ describe("ramp allowlist", () => {
     expect(matchRampRoute("GET", ["v1", "consumer"])).toBeNull();
     expect(matchRampRoute("POST", ["v1", "payments"])).toBeNull();
     expect(matchRampRoute("GET", ["v1", "prereg", "me"])).toBeNull();
-    expect(matchRampRoute("DELETE", ["v1", "destinations", DST])).toBeNull();
+    expect(matchRampRoute("POST", ["v1", "destinations", DST, "confirm"])).toBeNull();
+    expect(matchRampRoute("DELETE", ["v1", "withdrawals", WDR])).toBeNull();
     expect(matchRampRoute("GET", ["v1", "parties"])).toBeNull();
     expect(matchRampRoute("POST", ["v1", "parties", "me"])).toBeNull();
     expect(matchRampRoute("GET", ["v1", "destinations", "dst_bad"])).toBeNull();
@@ -220,6 +223,80 @@ describe("ramp relay", () => {
       deps(f),
     );
     expect(fetchSite.status).toBe(403);
+    const noOrigin = await proxyRampRequest(
+      request({ method: "POST", segments: ["v1", "parties"], body: "{}", origin: null }),
+      deps(f),
+    );
+    expect(noOrigin.status).toBe(403);
+    const crossDelete = await proxyRampRequest(
+      request({ method: "DELETE", segments: ["v1", "destinations", DST], origin: "https://evil.example" }),
+      deps(f),
+    );
+    expect(crossDelete.status).toBe(403);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("removes a key with DELETE, with the session and no body or Idempotency-Key", async () => {
+    const f = vi.fn(async () => new Response(null, { status: 204 }));
+    const res = await proxyRampRequest(
+      request({ method: "DELETE", segments: ["v1", "destinations", DST] }),
+      deps(f as unknown as ReturnType<typeof upstream>),
+    );
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(url).toBe(`https://api.ramp.tucop.xyz/v1/destinations/${DST}`);
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBeUndefined();
+    expect(headers["Idempotency-Key"]).toBeUndefined();
+    expect(headers["X-TuCOPRamp-Party-Session"]).toBe("tps_session");
+    expect(res.status).toBe(204);
+  });
+
+  it("revokes the session at the ramp on sign-out, then drops the cookie", async () => {
+    const f = vi.fn(async () => new Response(null, { status: 204 }));
+    const res = await signOutRampSession(request(), deps(f as unknown as ReturnType<typeof upstream>));
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(url).toBe("https://api.ramp.tucop.xyz/v1/sessions/current");
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBeUndefined();
+    expect(headers["X-TuCOPRamp-Key"]).toBe(KEY);
+    expect(headers["TuCOPRamp-Version"]).toBe(RAMP_API_VERSION);
+    expect(headers["X-TuCOPRamp-Party-Session"]).toBe("tps_session");
+    expect(headers["X-TuCOPRamp-Client-IP"]).toBe("181.49.12.34");
+    expect(res.status).toBe(204);
+    expect(res.cookies).toHaveLength(1);
+    expect(res.cookies[0]).toContain(`${SESSION_COOKIE}=;`);
+    expect(res.cookies[0]).toContain("Max-Age=0");
+  });
+
+  it("drops the cookie on sign-out even when the ramp fails or there is no session", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const down = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const res = await signOutRampSession(request(), deps(down as unknown as ReturnType<typeof upstream>));
+    expect(res.status).toBe(204);
+    expect(res.cookies[0]).toContain("Max-Age=0");
+
+    const refused = upstream(500, { status: 500, code: "internal" });
+    expect((await signOutRampSession(request(), deps(refused))).cookies[0]).toContain("Max-Age=0");
+
+    const none = upstream(204, {});
+    const noSession = await signOutRampSession(request({ sessionToken: null }), deps(none));
+    expect(noSession.status).toBe(204);
+    expect(noSession.cookies[0]).toContain("Max-Age=0");
+    expect(none).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it("refuses a cross-site sign-out without calling the ramp", async () => {
+    const f = upstream(204, {});
+    for (const over of [{ origin: "https://evil.example" }, { origin: null }, { fetchSite: "cross-site" }]) {
+      const res = await signOutRampSession(request(over), deps(f));
+      expect(res.status).toBe(403);
+      expect(res.cookies).toHaveLength(0);
+    }
     expect(f).not.toHaveBeenCalled();
   });
 

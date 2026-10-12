@@ -42,11 +42,11 @@ export function currentDestination(
     const linked = own.find((d) => d.id === active.destination_id);
     if (linked) return linked;
   }
-  // The list is newest first. A confirmed verified key wins over a newer
-  // unconfirmed one, so changing your mind halfway does not lose it.
+  // The list is newest first. A verified key wins over a newer pending one,
+  // as on ramp.tucop.xyz.
   return (
-    own.find((d) => d.status === "verified" && d.confirmed_at) ??
-    own.find((d) => d.status !== "rejected") ??
+    own.find((d) => d.status === "verified") ??
+    own.find((d) => d.status === "pending") ??
     null
   );
 }
@@ -64,6 +64,40 @@ export function activeWithdrawal(
 
 export function activeDeposit(deposits: readonly Deposit[]): Deposit | null {
   return deposits.find((d) => d.status === "active") ?? null;
+}
+
+/**
+ * How a payout from the withdrawal address reads, from Bridge's drain state
+ * (mapping agreed with TuCOP Ramp). Anything unknown is still processing.
+ */
+export type PayoutPhase = "waiting" | "processing" | "paid" | "failed" | "returned" | "canceled";
+
+const PAYOUT_PHASES: Record<string, PayoutPhase> = {
+  awaiting_funds: "waiting",
+  in_review: "processing",
+  funds_received: "processing",
+  payment_submitted: "processing",
+  refund_in_flight: "processing",
+  payment_processed: "paid",
+  undeliverable: "failed",
+  error: "failed",
+  missing_return_policy: "failed",
+  refund_failed: "failed",
+  returned: "returned",
+  refunded: "returned",
+  canceled: "canceled",
+};
+
+export function payoutPhase(state: string): PayoutPhase {
+  return PAYOUT_PHASES[state] ?? "processing";
+}
+
+/** "25.391500" USDC as "25,3915". */
+export function formatUsdc(amount: string | null | undefined): string | null {
+  if (!amount) return null;
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return null;
+  return value.toLocaleString("es-CO", { maximumFractionDigits: 6 });
 }
 
 /** "150" basis points as "1,5". */
