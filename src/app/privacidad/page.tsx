@@ -24,7 +24,10 @@ function OfframpPrivacy() {
         datos personales. El responsable del tratamiento es{" "}
         {dataController}, que opera el servicio. El servidor de
         digitalcop.shop solo retransmite tus datos a los sistemas de{" "}
-        {dataController}: no los guarda ni los registra. Para ejercer tus
+        {dataController}: no los guarda ni los registra. Junto con cada
+        solicitud le pasa la dirección IP desde la que te conectas, para que
+        los límites contra intentos abusivos se apliquen a cada persona y no
+        a todo el sitio. Para ejercer tus
         derechos o hacer una consulta, escribe a{" "}
         <a
           className="font-semibold text-brand underline"

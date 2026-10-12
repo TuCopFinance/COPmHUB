@@ -35,6 +35,10 @@ async function handle(request: NextRequest, context: Context): Promise<Response>
       origin: request.headers.get("origin"),
       host: request.headers.get("host"),
       fetchSite: request.headers.get("sec-fetch-site"),
+      // Railway's edge sets X-Real-IP to the connecting address and replaces
+      // any copy the caller sent; the app is only reachable through it.
+      // X-Forwarded-For is not used: a caller can put anything in it.
+      clientIp: request.headers.get("x-real-ip"),
     },
     {
       config: rampServerConfig(),
