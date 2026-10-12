@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isOfframpEnabled, missingOfframpEnv, offrampConfig } from "./config";
+import {
+  isOfframpEnabled,
+  missingOfframpEnv,
+  offrampConfig,
+  rampServerConfig,
+} from "./config";
 import { OFFRAMP_COPY } from "./copy";
 import { normalizeBreBKey } from "./breb";
 import {
@@ -18,7 +23,8 @@ import {
 
 const env = {
   OFFRAMP_ENABLED: "true",
-  OFFRAMP_API_URL: "https://api.ramp.tucop.xyz/",
+  TUCOPRAMP_API_URL: "https://api.ramp.tucop.xyz/",
+  TUCOPRAMP_API_KEY: "tcr_live_sk_test",
   OFFRAMP_DATA_CONTROLLER: "Operator",
   OFFRAMP_PRIVACY_CONTACT: "privacy@example.com",
 };
@@ -27,26 +33,32 @@ describe("off-ramp config", () => {
   it("stays off unless the flag and every required variable are set", () => {
     expect(isOfframpEnabled(env)).toBe(true);
     expect(isOfframpEnabled({ ...env, OFFRAMP_ENABLED: "false" })).toBe(false);
-    expect(isOfframpEnabled({ ...env, OFFRAMP_API_URL: "" })).toBe(false);
+    expect(isOfframpEnabled({ ...env, TUCOPRAMP_API_URL: "" })).toBe(false);
+    expect(isOfframpEnabled({ ...env, TUCOPRAMP_API_KEY: "" })).toBe(false);
     expect(isOfframpEnabled({ ...env, OFFRAMP_DATA_CONTROLLER: " " })).toBe(false);
     expect(isOfframpEnabled({ ...env, OFFRAMP_PRIVACY_CONTACT: undefined })).toBe(false);
     expect(isOfframpEnabled({})).toBe(false);
   });
 
   it("only talks to the API over https, except on localhost", () => {
-    expect(missingOfframpEnv({ ...env, OFFRAMP_API_URL: "http://api.example.com" })).toHaveLength(1);
-    expect(missingOfframpEnv({ ...env, OFFRAMP_API_URL: "not a url" })).toHaveLength(1);
-    expect(missingOfframpEnv({ ...env, OFFRAMP_API_URL: "http://localhost:3001" })).toEqual([]);
+    expect(missingOfframpEnv({ ...env, TUCOPRAMP_API_URL: "http://api.example.com" })).toHaveLength(1);
+    expect(missingOfframpEnv({ ...env, TUCOPRAMP_API_URL: "not a url" })).toHaveLength(1);
+    expect(missingOfframpEnv({ ...env, TUCOPRAMP_API_URL: "http://localhost:3001" })).toEqual([]);
   });
 
   it("strips the trailing slash from the API URL", () => {
-    expect(offrampConfig(env).apiUrl).toBe("https://api.ramp.tucop.xyz");
+    expect(rampServerConfig(env).apiUrl).toBe("https://api.ramp.tucop.xyz");
   });
 
-  it("needs no secret: a key or database URL is never read", () => {
-    const names = Object.keys(env).join(" ");
-    expect(names).not.toMatch(/KEY|SECRET|DATABASE|TOKEN/);
-    expect(() => offrampConfig(env)).not.toThrow();
+  it("gives pages nothing secret", () => {
+    const pageConfig = offrampConfig(env);
+    expect(Object.keys(pageConfig).sort()).toEqual(["dataController", "privacyContact"]);
+    expect(JSON.stringify(pageConfig)).not.toContain("tcr_");
+  });
+
+  it("names missing variables without showing values", () => {
+    const missing = missingOfframpEnv({ ...env, TUCOPRAMP_API_KEY: undefined });
+    expect(missing).toEqual(["TUCOPRAMP_API_KEY"]);
   });
 });
 
@@ -67,12 +79,13 @@ describe("off-ramp copy", () => {
 describe("off-ramp error messages", () => {
   it("has Spanish copy for the codes a person can act on", () => {
     for (const code of [
-      "invalid_credentials",
+      "invalid_code",
       "invalid_document",
       "document_already_registered",
       "destination_rejected",
-      "destination_validation_timeout",
+      "destination_not_verified",
       "rate_limited_email",
+      "email_not_sent",
     ]) {
       expect(offrampErrorMessage(code)).not.toBe(GENERIC_ERROR);
     }

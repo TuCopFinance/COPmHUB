@@ -22,7 +22,7 @@ export const metadata: Metadata = pageMetadata({
 
 export default function OfframpPage() {
   if (!isOfframpEnabled()) notFound();
-  const { apiUrl, dataController, privacyContact } = offrampConfig();
+  const { dataController, privacyContact } = offrampConfig();
 
   return (
     <main>
@@ -40,7 +40,6 @@ export default function OfframpPage() {
           </p>
           <div className="mt-10">
             <OfframpFlow
-              apiUrl={apiUrl}
               dataController={dataController}
               privacyContact={privacyContact}
             />
@@ -51,7 +50,8 @@ export default function OfframpPage() {
             verificación de identidad y los pagos los procesa Bridge.
             Registrarte no tiene costo ni te obliga a usar el servicio. Al
             confirmar tu llave recibes una dirección de liquidación que solo
-            acepta USDC en la red Celo.
+            acepta USDC en la red Celo, y con tu identidad verificada puedes
+            también comprar USDC con pesos por Bre-B.
           </p>
         </div>
       </section>

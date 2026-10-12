@@ -22,10 +22,10 @@ function OfframpPrivacy() {
       <p>
         El registro al off-ramp es la única parte de este sitio que pide
         datos personales. El responsable del tratamiento es{" "}
-        {dataController}, que opera el servicio. El formulario envía tus
-        datos directamente a sus sistemas: digitalcop.shop no los recibe ni
-        los guarda. Para ejercer tus derechos o hacer una consulta, escribe
-        a{" "}
+        {dataController}, que opera el servicio. El servidor de
+        digitalcop.shop solo retransmite tus datos a los sistemas de{" "}
+        {dataController}: no los guarda ni los registra. Para ejercer tus
+        derechos o hacer una consulta, escribe a{" "}
         <a
           className="font-semibold text-brand underline"
           href={`mailto:${privacyContact}`}
@@ -37,14 +37,16 @@ function OfframpPrivacy() {
       <p>
         Qué guarda {dataController}: tu nombre, tu correo, el tipo y número
         de tu documento (cifrado), la fecha en que diste tu autorización, el
-        estado de tu verificación y, de tu cuenta Bre-B, solo el banco, el
+        estado de tu verificación, de tu cuenta Bre-B solo el banco, el
         nombre del titular y los últimos cuatro caracteres de la llave y del
-        documento. No guarda tus fotos ni tu llave Bre-B completa.
+        documento, y las direcciones de billetera que registres para
+        recibir USDC o para que te devuelvan un pago fallido. No guarda tus
+        fotos ni tu llave Bre-B completa.
       </p>
       <p>
         Para qué: verificar tu identidad, comprobar que la cuenta Bre-B es
-        tuya, prestarte el servicio de off-ramp y enviarte por correo tu
-        dirección de liquidación. Estos datos no se usan para publicidad
+        tuya y prestarte los servicios de retiro (off-ramp) y depósito
+        (on-ramp) en pesos. Estos datos no se usan para publicidad
         de terceros ni se venden.
       </p>
       <p>
@@ -55,9 +57,10 @@ function OfframpPrivacy() {
         fuera de Colombia.
       </p>
       <p>
-        En tu navegador: mientras la pestaña esté abierta se guarda un
-        identificador de sesión para que no tengas que confirmar tu correo
-        en cada paso. Se borra al cerrar la pestaña o al elegir Salir.
+        En tu navegador: al confirmar tu correo se guarda una cookie de
+        sesión, que el código de la página no puede leer, para que no
+        tengas que confirmar tu correo en cada paso. Vence en una hora o al
+        elegir Salir.
       </p>
       <p>
         Tus derechos: puedes conocer, actualizar y rectificar tus datos,
