@@ -78,6 +78,15 @@ export type Deposit = {
   };
   destination: { address: string; chain: string; asset: string; token_contract: string };
   fee_bps: number;
+  /** The provider's activity, most recent first. Only on GET /v1/deposits/{id}. */
+  events?: DepositEvent[];
+};
+
+export type DepositEvent = {
+  id: string;
+  type: string;
+  amount: Amount | null;
+  created_at: string | null;
 };
 
 export type DocumentType = { code: string; name: string; hint: string };

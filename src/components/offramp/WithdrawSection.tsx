@@ -48,7 +48,6 @@ export function WithdrawSection({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [breBKey, setBreBKey] = useState("");
-  const [wantsOtherKey, setWantsOtherKey] = useState(false);
   const [rejected, setRejected] = useState<Destination | null>(null);
   const [pollExpired, setPollExpired] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -92,8 +91,7 @@ export function WithdrawSection({
     : null;
   // A key just refused keeps the form on screen with the reason, even when an
   // older key would otherwise be shown.
-  const showForm =
-    wantsOtherKey || Boolean(rejected && destinations?.[0]?.id === rejected.id);
+  const showForm = Boolean(rejected && destinations?.[0]?.id === rejected.id);
 
   useEffect(() => {
     onActiveChange(Boolean(withdrawal));
@@ -153,15 +151,16 @@ export function WithdrawSection({
       setBreBKey("");
       setRejected(data.status === "rejected" ? data : null);
       setPollExpired(false);
-      setWantsOtherKey(false);
       upsert(data);
     });
 
-  const confirmKey = (id: string) =>
+  // Removes the person's own key (not allowed once it has an active address).
+  const removeKey = (id: string) =>
     run(async () => {
-      const { data } = await ramp<Destination>("POST", `v1/destinations/${id}/confirm`, {});
-      track("offramp_key_confirmed", { section: "offramp" });
-      upsert(data);
+      await ramp<null>("DELETE", `v1/destinations/${id}`);
+      track("offramp_key_removed", { section: "offramp" });
+      setRejected(null);
+      setDestinations((list) => (list ?? []).filter((d) => d.id !== id));
     });
 
   const createWithdrawal = (destinationId: string, returnAddress: string) =>
@@ -333,59 +332,41 @@ export function WithdrawSection({
     );
   }
 
-  if (destination && !showForm && destination.status === "verified" && !destination.confirmed_at) {
-    return (
-      <>
-        <h2 className={headingClass}>¿Es esta tu cuenta?</h2>
-        <dl className="mt-5 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-3 rounded-2xl border border-line bg-bg p-5 text-sm">
-          <dt className="text-muted">Banco</dt>
-          <dd className="font-semibold text-ink">{destination.holder?.bank ?? "Sin dato"}</dd>
-          <dt className="text-muted">Titular</dt>
-          <dd className="font-semibold text-ink">{destination.holder?.name ?? "Sin dato"}</dd>
-          <dt className="text-muted">Documento</dt>
-          <dd className="font-semibold text-ink">
-            {destination.holder?.document_last4
-              ? `termina en ${destination.holder.document_last4}`
-              : "Sin dato"}
-          </dd>
-          <dt className="text-muted">Llave</dt>
-          <dd className="font-semibold text-ink">{destination.key_masked}</dd>
-        </dl>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => confirmKey(destination.id)}
-            className={primaryClass}
-          >
-            Sí, es mi cuenta
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => setWantsOtherKey(true)}
-            className={secondaryClass}
-          >
-            No, usar otra llave
-          </button>
-        </div>
-        {errorLine}
-      </>
-    );
-  }
-
-  if (destination && !showForm && destination.status === "verified" && destination.confirmed_at) {
+  if (destination && !showForm && destination.status === "verified") {
     return (
       <>
         <h2 className={headingClass}>¿A qué billetera devolvemos un pago fallido?</h2>
         <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
-          Tu llave Bre-B{" "}
-          <strong className="text-ink">
-            {destination.key_masked}
-            {destination.holder?.bank ? ` (${destination.holder.bank})` : ""}
-          </strong>{" "}
-          quedó lista. Si alguna vez un pago a esa cuenta falla, el USDC vuelve a tu
-          billetera en la red Celo.
+          El banco confirmó que esta llave Bre-B está a tu nombre. Los pesos de tus ventas
+          llegan a esta cuenta:
+        </p>
+        <dl className="mt-4 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-3 rounded-2xl border border-line bg-bg p-5 text-sm">
+          <dt className="text-muted">Llave</dt>
+          <dd className="font-semibold text-ink">{destination.key_masked}</dd>
+          <dt className="text-muted">Banco</dt>
+          <dd className="font-semibold text-ink">{destination.holder?.bank ?? "Sin dato"}</dd>
+          <dt className="text-muted">Titular</dt>
+          <dd className="font-semibold text-ink">{destination.holder?.name ?? "Sin dato"}</dd>
+          {destination.holder?.document_last4 ? (
+            <>
+              <dt className="text-muted">Documento</dt>
+              <dd className="font-semibold text-ink">
+                termina en {destination.holder.document_last4}
+              </dd>
+            </>
+          ) : null}
+        </dl>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => removeKey(destination.id)}
+          className="mt-3 text-sm font-semibold text-brand hover:underline"
+        >
+          No es mi cuenta, quitar esta llave
+        </button>
+        <p className="mt-6 max-w-prose text-sm leading-relaxed text-muted">
+          Si alguna vez un pago a esa cuenta falla, el USDC vuelve a tu billetera en la red
+          Celo.
         </p>
         <WalletConfirm
           purpose="Usa una billetera tuya en la red Celo. Esta dirección no se puede cambiar después."
@@ -440,16 +421,6 @@ export function WithdrawSection({
         <button type="submit" disabled={busy} className={primaryClass}>
           {busy ? "Enviando..." : "Validar llave"}
         </button>
-        {wantsOtherKey ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => setWantsOtherKey(false)}
-            className={secondaryClass}
-          >
-            Volver
-          </button>
-        ) : null}
       </div>
       {errorLine}
     </form>

@@ -84,12 +84,15 @@ export function clearedSessionCookie(): string {
   return sessionCookie("", 0);
 }
 
-/** A cross-site page must not be able to act with the person's cookie. */
+/**
+ * A cross-site page must not be able to act with the person's cookie. A
+ * browser sends Origin on every POST and DELETE, so one without it is refused.
+ */
 function sameOrigin(req: ProxyRequest): boolean {
   if (req.fetchSite && req.fetchSite !== "same-origin" && req.fetchSite !== "none") {
     return false;
   }
-  if (!req.origin) return true;
+  if (!req.origin) return false;
   try {
     return new URL(req.origin).host === req.host;
   } catch {
@@ -127,7 +130,7 @@ export async function proxyRampRequest(
   const route = matchRampRoute(req.method, req.segments);
   if (!route) return problem(404, "not_found", "The requested resource was not found.");
 
-  if (route.method === "POST" && !sameOrigin(req)) {
+  if (route.method !== "GET" && !sameOrigin(req)) {
     return problem(403, "forbidden_origin", "Requests must come from this site.");
   }
 

@@ -3,7 +3,7 @@
  * listed here is refused before it reaches the ramp.
  */
 
-export type RampMethod = "GET" | "POST";
+export type RampMethod = "GET" | "POST" | "DELETE";
 
 /**
  * - `none`: no party session is sent (sign-in, static data).
@@ -16,7 +16,7 @@ export type RampRoute = {
   method: RampMethod;
   pattern: RegExp;
   session: SessionMode;
-  /** POSTs that need an Idempotency-Key. The session calls must not get one. */
+  /** POSTs that need an Idempotency-Key. The session calls and DELETEs get none. */
   idempotent: boolean;
   /** Query parameters forwarded as they are. Others are dropped. */
   query?: readonly string[];
@@ -25,6 +25,7 @@ export type RampRoute = {
 // Public ids are a prefix plus 26 Crockford base32 characters.
 const DST = "dst_[0-9a-hjkmnp-tv-z]{26}";
 const WDR = "wdr_[0-9a-hjkmnp-tv-z]{26}";
+const DEP = "dep_[0-9a-hjkmnp-tv-z]{26}";
 
 export const RAMP_ROUTES: readonly RampRoute[] = [
   { method: "POST", pattern: /^v1\/sessions\/email-otp$/, session: "none", idempotent: false },
@@ -41,12 +42,9 @@ export const RAMP_ROUTES: readonly RampRoute[] = [
   { method: "GET", pattern: /^v1\/destinations$/, session: "use", idempotent: false },
   { method: "POST", pattern: /^v1\/destinations$/, session: "use", idempotent: true },
   { method: "GET", pattern: new RegExp(`^v1/destinations/${DST}$`, "i"), session: "use", idempotent: false },
-  {
-    method: "POST",
-    pattern: new RegExp(`^v1/destinations/${DST}/confirm$`, "i"),
-    session: "use",
-    idempotent: true,
-  },
+  // Removes the person's own key, here and at the provider. The ramp refuses
+  // it (409 destination_in_use) while the key has an active address.
+  { method: "DELETE", pattern: new RegExp(`^v1/destinations/${DST}$`, "i"), session: "use", idempotent: false },
   { method: "GET", pattern: /^v1\/withdrawals$/, session: "use", idempotent: false },
   { method: "POST", pattern: /^v1\/withdrawals$/, session: "use", idempotent: true },
   // The address with its payouts.
@@ -55,6 +53,8 @@ export const RAMP_ROUTES: readonly RampRoute[] = [
   { method: "POST", pattern: /^v1\/quotes$/, session: "use", idempotent: true },
   { method: "GET", pattern: /^v1\/deposits$/, session: "use", idempotent: false },
   { method: "POST", pattern: /^v1\/deposits$/, session: "use", idempotent: true },
+  // The deposit account with its activity.
+  { method: "GET", pattern: new RegExp(`^v1/deposits/${DEP}$`, "i"), session: "use", idempotent: false },
 ];
 
 /** The route for a request, or null when it is not allowed. */

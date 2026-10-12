@@ -14,7 +14,9 @@ function toResponse(result: ProxyResponse): Response {
   });
   if (result.retryAfter) headers.set("Retry-After", result.retryAfter);
   for (const cookie of result.cookies) headers.append("Set-Cookie", cookie);
-  return new Response(result.body, { status: result.status, headers });
+  // 204 (a removed key) carries no body.
+  const empty = result.status === 204 || result.status === 205 || result.status === 304;
+  return new Response(empty ? null : result.body, { status: result.status, headers });
 }
 
 async function handle(request: NextRequest, context: Context): Promise<Response> {
@@ -53,3 +55,4 @@ async function handle(request: NextRequest, context: Context): Promise<Response>
 
 export const GET = handle;
 export const POST = handle;
+export const DELETE = handle;

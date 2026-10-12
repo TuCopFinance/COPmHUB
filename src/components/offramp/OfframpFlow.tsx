@@ -7,6 +7,7 @@ import {
   DOCUMENT_TYPES,
   GENERIC_ERROR,
   SESSION_CODES,
+  isOfferedDocument,
 } from "@/lib/offramp/messages";
 import {
   CONSENT_VERSION,
@@ -89,7 +90,12 @@ export function OfframpFlow({
       setParty(data.party);
       setStage(stageOf(data.party));
     } catch (cause) {
-      if (cause instanceof RampError && cause.code === "party_required") {
+      // party_not_linked: the person withdrew consent to this app. Giving it
+      // again in "Tus datos" links the party back (POST /v1/parties, 200).
+      if (
+        cause instanceof RampError &&
+        (cause.code === "party_required" || cause.code === "party_not_linked")
+      ) {
         setStage("new");
         return;
       }
@@ -142,9 +148,10 @@ export function OfframpFlow({
       "v1/document-types?country=COL&party_type=individual",
     ).then(
       ({ data }) => {
-        if (!active || data.document_types.length === 0) return;
+        const offered = data.document_types.filter((d) => isOfferedDocument(d.code));
+        if (!active || offered.length === 0) return;
         setDocuments(
-          data.document_types.map((d) => ({
+          offered.map((d) => ({
             value: d.code,
             label: DOCUMENT_LABELS[d.code] ?? d.name,
           })),

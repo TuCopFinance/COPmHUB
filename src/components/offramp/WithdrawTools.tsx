@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatCop } from "@/lib/offramp/flow";
+import { formatCop, formatUsdc, payoutPhase, type PayoutPhase } from "@/lib/offramp/flow";
 import { GENERIC_ERROR, SESSION_CODES } from "@/lib/offramp/messages";
 import { RampError, ramp } from "@/components/offramp/api";
 import type { Payout, Quote, Withdrawal } from "@/components/offramp/types";
@@ -10,16 +10,13 @@ import { Field, inputClass, secondaryClass } from "@/components/offramp/ui";
 // Bridge does not pay out below this (also in withdrawal.deposit).
 const FLOOR_COP = 4000;
 
-/** Bridge's payout states, in words. Anything else reads as in progress. */
-const PAYOUT_STATUS: Record<string, string> = {
-  payment_processed: "Pagado",
-  payment_submitted: "Enviado al banco",
-  funds_received: "USDC recibido",
-  in_review: "En revisión",
-  awaiting_funds: "Esperando el USDC",
+/** Payout phases, in words (mapping agreed with TuCOP Ramp). */
+const PAYOUT_LABEL: Record<PayoutPhase, string> = {
+  waiting: "Esperando el USDC",
+  processing: "En proceso",
+  paid: "Pagado",
+  failed: "No se pudo pagar",
   returned: "Devuelto a tu billetera",
-  refunded: "Devuelto a tu billetera",
-  error: "Con error",
   canceled: "Cancelado",
 };
 
@@ -101,9 +98,12 @@ export function QuoteCalculator({
       </div>
       {quote ? (
         <p className="mt-4 text-sm leading-relaxed text-ink" role="status">
-          Envía al menos <strong>{quote.source_amount.amount} USDC</strong> para recibir{" "}
-          <strong>{formatCop(quote.destination_amount.amount)} COP</strong>. Incluye la
-          comisión; la tasa de cambio puede moverse, así que es un precio de referencia.
+          Envía al menos{" "}
+          <strong>
+            {formatUsdc(quote.source_amount.amount) ?? quote.source_amount.amount} USDC
+          </strong>{" "}
+          para recibir <strong>{formatCop(quote.destination_amount.amount)} COP</strong>. Es
+          un precio de referencia e incluye la comisión: lo que envíes de más también se paga.
         </p>
       ) : null}
       {error ? (
@@ -165,10 +165,10 @@ export function PayoutList({
                 {payout.destination_amount
                   ? `${formatCop(payout.destination_amount.amount)} COP`
                   : payout.amount
-                    ? `${payout.amount.amount} ${payout.amount.asset}`
+                    ? `${formatUsdc(payout.amount.amount) ?? payout.amount.amount} ${payout.amount.asset}`
                     : ""}
               </span>
-              <span className="text-muted">{PAYOUT_STATUS[payout.status] ?? "En proceso"}</span>
+              <span className="text-muted">{PAYOUT_LABEL[payoutPhase(payout.status)]}</span>
             </li>
           ))}
         </ul>

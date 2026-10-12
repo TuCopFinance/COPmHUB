@@ -29,7 +29,7 @@ function isFinal(status: number, code: string | undefined): boolean {
 }
 
 export async function ramp<T>(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<RampResult<T>> {
