@@ -131,6 +131,11 @@ describe("error copy", () => {
       "rate_limited_email",
       "rate_limited_party_session",
       "invalid_code",
+      "amount_below_minimum",
+      "amount_not_settleable",
+      "rate_unavailable",
+      "withdrawal_not_found",
+      "idempotency_in_progress",
     ]) {
       expect(offrampErrorMessage(code), code).not.toBe(GENERIC_ERROR);
     }

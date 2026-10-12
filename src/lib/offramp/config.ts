@@ -63,6 +63,26 @@ export function isOfframpEnabled(source: Source = process.env): boolean {
   );
 }
 
+/**
+ * Buying USDC with pesos (/v1/deposits) is built but stays hidden until TuCOP
+ * confirms Bridge has enabled COP virtual accounts. Read per request on
+ * /offramp; the static legal pages read it at build time.
+ */
+export function isOnrampEnabled(source: Source = process.env): boolean {
+  return isOfframpEnabled(source) && source.ONRAMP_ENABLED === "true";
+}
+
+/**
+ * Signing secret of this site's webhook endpoint under the TuCOP Ramp
+ * integrator (`whsec_` + base64), or null when it is not set.
+ */
+export function webhookSecret(source: Source = process.env): Uint8Array | null {
+  const value = source.TUCOPRAMP_WEBHOOK_SECRET?.trim();
+  if (!value?.startsWith("whsec_")) return null;
+  const key = Buffer.from(value.slice("whsec_".length), "base64");
+  return key.length > 0 ? new Uint8Array(key) : null;
+}
+
 /** What pages may show. Holds nothing secret. */
 export function offrampConfig(source: Source = process.env): OfframpConfig {
   assertConfigured(source);

@@ -38,6 +38,13 @@ const MESSAGES: Record<string, string> = {
   invalid_return_address: "Esa dirección de billetera no es válida.",
   wallet_address_required: "Escribe la dirección de tu billetera en la red Celo.",
   return_address_required: "Escribe la dirección de tu billetera en la red Celo.",
+  // Quote and payouts
+  amount_below_minimum: "El monto es menor al mínimo por envío.",
+  amount_not_settleable: "Escribe el monto en pesos enteros.",
+  invalid_amount: "Escribe un monto válido en pesos.",
+  rate_unavailable: "No pudimos consultar la tasa de cambio. Intenta de nuevo en unos minutos.",
+  withdrawal_not_found: "No encontramos tu dirección de liquidación.",
+  idempotency_in_progress: "Tu solicitud anterior aún se está procesando. Espera un momento.",
   // Provider
   provider_rejected:
     "Nuestro proveedor no pudo crear tu dirección. Intenta de nuevo más tarde o escríbenos.",

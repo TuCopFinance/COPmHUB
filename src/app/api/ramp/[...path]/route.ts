@@ -39,6 +39,7 @@ async function handle(request: NextRequest, context: Context): Promise<Response>
       // any copy the caller sent; the app is only reachable through it.
       // X-Forwarded-For is not used: a caller can put anything in it.
       clientIp: request.headers.get("x-real-ip"),
+      idempotencyKey: request.headers.get("idempotency-key"),
     },
     {
       config: rampServerConfig(),

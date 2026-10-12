@@ -5,6 +5,7 @@ import { Nav } from "@/components/Nav";
 import { OfframpFlow } from "@/components/offramp/OfframpFlow";
 import {
   isOfframpEnabled,
+  isOnrampEnabled,
   offrampConfig,
   OFFRAMP_PATH,
 } from "@/lib/offramp/config";
@@ -23,6 +24,7 @@ export const metadata: Metadata = pageMetadata({
 export default function OfframpPage() {
   if (!isOfframpEnabled()) notFound();
   const { dataController, privacyContact } = offrampConfig();
+  const onrampEnabled = isOnrampEnabled();
 
   return (
     <main>
@@ -42,6 +44,7 @@ export default function OfframpPage() {
             <OfframpFlow
               dataController={dataController}
               privacyContact={privacyContact}
+              onrampEnabled={onrampEnabled}
             />
           </div>
           <p className="mt-6 rounded-2xl border border-line bg-bg p-4 text-sm leading-relaxed text-muted">
@@ -50,8 +53,10 @@ export default function OfframpPage() {
             verificación de identidad y los pagos los procesa Bridge.
             Registrarte no tiene costo ni te obliga a usar el servicio. Al
             confirmar tu llave recibes una dirección de liquidación que solo
-            acepta USDC en la red Celo, y con tu identidad verificada puedes
-            también comprar USDC con pesos por Bre-B.
+            acepta USDC en la red Celo
+            {onrampEnabled
+              ? ", y con tu identidad verificada puedes también comprar USDC con pesos por Bre-B."
+              : "."}
           </p>
         </div>
       </section>

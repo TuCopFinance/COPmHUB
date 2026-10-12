@@ -44,9 +44,12 @@ const SESSION_EXPIRED = "Tu sesión venció. Confirma tu correo de nuevo.";
 export function OfframpFlow({
   dataController,
   privacyContact,
+  onrampEnabled,
 }: {
   dataController: string;
   privacyContact: string;
+  /** Buying USDC stays hidden until TuCOP confirms Bridge enabled it. */
+  onrampEnabled: boolean;
 }) {
   const [stage, setStage] = useState<Stage>("loading");
   const [party, setParty] = useState<Party | null>(null);
@@ -428,7 +431,10 @@ export function OfframpFlow({
                   />
                   <span>
                     Autorizo a {dataController} a tratar mis datos personales para
-                    verificar mi identidad y prestarme los servicios de retiro y depósito
+                    verificar mi identidad y prestarme{" "}
+                    {onrampEnabled
+                      ? "los servicios de retiro y depósito"
+                      : "el servicio de retiro"}{" "}
                     en pesos, y a compartirlos con Bridge, su proveedor de verificación y
                     pagos, según el{" "}
                     <a
@@ -608,7 +614,9 @@ export function OfframpFlow({
         ) : null}
       </div>
 
-      {stage === "verified" ? <DepositCard onSessionExpired={onSessionExpired} /> : null}
+      {stage === "verified" && onrampEnabled ? (
+        <DepositCard onSessionExpired={onSessionExpired} />
+      ) : null}
     </>
   );
 }
