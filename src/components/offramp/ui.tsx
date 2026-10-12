@@ -1,23 +1,21 @@
 import type { ReactNode } from "react";
-import type { State } from "@/components/offramp/types";
+import type { Stage } from "@/components/offramp/types";
 
 const STEPS = ["Correo", "Tus datos", "Identidad", "Llave Bre-B", "Listo"];
 
-export function stepIndex(state: State): number {
-  switch (state) {
+export function stepIndex(stage: Stage, offrampActive: boolean): number {
+  switch (stage) {
+    case "loading":
     case "signed_out":
       return 0;
     case "new":
       return 1;
-    case "kyc_pending":
+    case "kyc":
     case "rejected":
     case "restricted":
       return 2;
-    case "kyc_approved":
-    case "destination_pending":
-      return 3;
-    case "destination_verified":
-      return 4;
+    case "verified":
+      return offrampActive ? 4 : 3;
   }
 }
 

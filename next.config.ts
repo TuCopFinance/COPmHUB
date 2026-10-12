@@ -3,23 +3,13 @@ import { BRIDGE_FRAME_ORIGINS, BRIDGE_KYC_ORIGIN } from "./src/lib/offramp/embed
 
 const CANONICAL_HOST = "digitalcop.shop";
 
-function originOf(value: string | undefined): string | null {
-  if (!value) return null;
-  try {
-    return new URL(value.trim()).origin;
-  } catch {
-    return null;
-  }
-}
-
-// The off-ramp form calls TuCOPRamp from the browser, so its origin has to be
-// allowed in connect-src. Read at build time, like the feature flag itself.
-const offrampApi = originOf(process.env.OFFRAMP_API_URL);
 const isDev = process.env.NODE_ENV !== "production";
 
-// The off-ramp form shows Bridge's terms and identity pages in frames, and the
+// The off-ramp form calls only this site (/api/ramp), so connect-src stays
+// 'self'. It shows Bridge's terms and identity pages in frames, and the
 // identity check needs the camera. Both stay closed while the form is off.
-const offrampOn = process.env.OFFRAMP_ENABLED === "true" && offrampApi !== null;
+// Read at build time, like the feature flag itself.
+const offrampOn = process.env.OFFRAMP_ENABLED === "true";
 const frameSrc = offrampOn ? BRIDGE_FRAME_ORIGINS.join(" ") : "'none'";
 // `self` is needed too: a browser only hands the camera to a frame from a
 // document that is itself allowed to use it.
@@ -35,7 +25,6 @@ const csp = [
   "font-src 'self'",
   [
     "connect-src 'self'",
-    offrampApi,
     "https://*.google-analytics.com",
     "https://*.analytics.google.com",
     "https://www.googletagmanager.com",

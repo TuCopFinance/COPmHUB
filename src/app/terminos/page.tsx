@@ -32,12 +32,14 @@ export default function TerminosPage() {
         </p>
         {offramp ? (
           <p>
-            El off-ramp a llaves Bre-B lo opera {offramp.dataController}, no
-            DigitalCOP. Este sitio solo aloja el formulario: la verificación
-            de identidad y los pagos los procesa Bridge, y aplican los
-            términos de ambos. La dirección de liquidación solo acepta USDC
-            en la red Celo; lo que envíes en otro token o por otra red se
-            puede perder.
+            El off-ramp y el on-ramp a llaves Bre-B los opera{" "}
+            {offramp.dataController}, no DigitalCOP. Este sitio solo aloja el
+            formulario: la verificación de identidad y los pagos los procesa
+            Bridge, y aplican los términos de ambos. La dirección de
+            liquidación solo acepta USDC en la red Celo; lo que envíes en otro
+            token o por otra red se puede perder. Tú respondes por las
+            direcciones de billetera que registras: si una está mal, lo que
+            se envíe ahí no se puede recuperar.
           </p>
         ) : null}
         <p>

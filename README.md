@@ -21,7 +21,8 @@ src/
     nosotros/             Legal: about
     terminos/             Legal: terms
     privacidad/           Legal: privacy
-    offramp/              Bre-B off-ramp registration and activation (feature-flagged)
+    offramp/              Bre-B off-ramp and on-ramp registration (feature-flagged)
+    api/ramp/             Server relay to the TuCOPRamp platform API
     que-es-copm/          SEO cluster page
     cambiar-usd-a-cop/    SEO cluster page
     invertir-pesos-digitales/    SEO cluster page
@@ -44,19 +45,23 @@ public/
 
 `src/lib/services.ts` is the source of truth for the core Services section. `content/ecosystem/*.json` is the source of truth for `/ecosystem`. `src/lib/site.ts` drives URLs, nav, SEO cluster / legal pages, and the sitemap.
 
-## Bre-B off-ramp (feature-flagged)
+## Bre-B off-ramp and on-ramp (feature-flagged)
 
-`/offramp` lets a person pre-register for the off-ramp to Bre-B keys in Colombia without leaving the hub: confirm an email with a one-time code, enter their name and identity document, complete KYC and terms on Bridge's hosted pages, and register their own Bre-B key. Once the key is confirmed the page shows the person's liquidation address, which only accepts USDC on Celo and pays out in pesos to that key.
+`/offramp` registers a person as a direct client of TuCOP Ramp without leaving the hub: confirm an email with a one-time code, enter their name and identity document, complete Bridge's terms and identity check inside the page, then register their own Bre-B key. Once the key is confirmed the person gets a liquidation address (USDC on Celo in, pesos to their key out) and, separately, a Bre-B key to buy USDC with pesos (on-ramp). Someone who registered before signs in with the same email and sees what they already have; nothing is created twice.
 
-The hub hosts the form and nothing else. The service is operated by TuCOP, and the browser sends everything straight to its TuCOPRamp API (`/v1/prereg/*`). This repo has no database, no API routes and no secrets for it, and the hub's server never sees personal data.
+The service is operated by TuCOP. The form calls only this site: `src/app/api/ramp/[...path]/route.ts` relays an allowlist of TuCOPRamp platform calls (`/v1/sessions`, `/v1/parties`, `/v1/destinations`, `/v1/withdrawals`, `/v1/deposits`, `/v1/document-types`) with TuCOP Ramp's integrator key, which stays on the server. The party session token lives in an httpOnly cookie and never reaches client code. The relay does not store or log request or response bodies. The site has no database.
 
 ```text
-src/app/offramp/          the off-ramp page
-src/components/offramp/   flow, UI primitives, promo card, one-time pop-up
-src/lib/offramp/          flag + public config, copy, error messages
+src/app/offramp/          the page
+src/app/api/ramp/         the relay to TuCOPRamp (allowlist, session cookie)
+src/components/offramp/   flow, off-ramp and on-ramp steps, wallet input, promo, pop-up
+src/lib/offramp/          flag + config, copy, error messages, wallet checks
+src/lib/ramp/             allowlist and relay logic (tested without Next)
 ```
 
-The card on the home page, the pop-up and the page stay off unless `OFFRAMP_ENABLED=true` and the variables in [`.env.example`](./.env.example) are set. The home and privacy pages are static, so the flag is read at build time; changing it needs a redeploy. The hub origin must be listed in TuCOPRamp's `CORS_ORIGINS`. Only the apex origin is allowed, so `next.config.ts` redirects `www` to it.
+The card on the home page, the pop-up, the page and the relay stay off unless `OFFRAMP_ENABLED=true` and the variables in [`.env.example`](./.env.example) are set. The home and privacy pages are static, so the flag is read at build time; changing it needs a redeploy. `next.config.ts` redirects `www` to the apex domain, which is the return URL TuCOP has on file for identity verification.
+
+The ramp only checks that a wallet is shaped like an address. This site answers for it: the form asks for the wallet twice, does not allow pasting into the second field, checks both match and shows the checksummed address before the person confirms.
 
 The flag is off in a fresh checkout and on in production.
 
@@ -83,7 +88,7 @@ npm test        # Vitest (services + site)
 
 ## Security headers
 
-`next.config.ts` sets a Content-Security-Policy, HSTS, `X-Frame-Options: DENY` and related headers on every route. `connect-src` allows the `OFFRAMP_API_URL` origin and Google Analytics. If the site starts calling a new origin from the browser, add it there.
+`next.config.ts` sets a Content-Security-Policy, HSTS, `X-Frame-Options: DENY` and related headers on every route. `connect-src` allows only this site and Google Analytics: the off-ramp form calls TuCOPRamp through `/api/ramp`. With the off-ramp on, `frame-src` and the camera permission open to Bridge's terms and identity pages. If the site starts calling a new origin from the browser, add it there.
 
 ## CI
 
