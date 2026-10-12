@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { forwardedQuery, matchRampRoute } from "./routes";
 import type { RampServerConfig } from "@/lib/offramp/config";
 
@@ -28,6 +29,11 @@ export type ProxyRequest = {
   host: string | null;
   /** Value of Sec-Fetch-Site, if any. */
   fetchSite: string | null;
+  /**
+   * Address the person connected from, as the hosting edge saw it. Never a
+   * value the browser can set (such as its own X-Forwarded-For).
+   */
+  clientIp: string | null;
 };
 
 export type ProxyResponse = {
@@ -84,6 +90,18 @@ function sameOrigin(req: ProxyRequest): boolean {
   }
 }
 
+/**
+ * One IPv4 or IPv6 address, or null. TuCOPRamp keys its per-person limits on
+ * it, so anything that is not exactly one address is dropped, not guessed at.
+ */
+export function clientAddress(value: string | null): string | null {
+  const ip = value?.trim();
+  if (!ip || isIP(ip) === 0) return null;
+  // An IPv4 client seen over an IPv6 socket: send the IPv4 form.
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
+  return mapped ? mapped[1] : ip;
+}
+
 function readJsonObject(body: string | null): string | null {
   if (body === null || body.trim() === "") return "{}";
   try {
@@ -111,6 +129,11 @@ export async function proxyRampRequest(
     "X-TuCOPRamp-Key": deps.config.apiKey,
     "TuCOPRamp-Version": RAMP_API_VERSION,
   };
+  // Every call reaches TuCOPRamp from this server's address. With the
+  // person's own address its per-IP limits apply per person, not to the
+  // whole site. TuCOPRamp only trusts it with this integrator key.
+  const clientIp = clientAddress(req.clientIp);
+  if (clientIp) headers["X-TuCOPRamp-Client-IP"] = clientIp;
 
   let body: string | undefined;
   if (route.method === "POST") {

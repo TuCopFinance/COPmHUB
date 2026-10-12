@@ -3,6 +3,7 @@ import { forwardedQuery, matchRampRoute } from "./routes";
 import {
   RAMP_API_VERSION,
   SESSION_COOKIE,
+  clientAddress,
   proxyRampRequest,
   type ProxyRequest,
 } from "./proxy";
@@ -20,6 +21,7 @@ function request(over: Partial<ProxyRequest> = {}): ProxyRequest {
     origin: "https://digitalcop.shop",
     host: "digitalcop.shop",
     fetchSite: "same-origin",
+    clientIp: "181.49.12.34",
     ...over,
   };
 }
@@ -205,6 +207,40 @@ describe("ramp relay", () => {
       expect(res.status).toBe(400);
     }
     expect(f).not.toHaveBeenCalled();
+  });
+
+  it("sends the person's address on every call, including the session ones", async () => {
+    const f = upstream(200, {});
+    await proxyRampRequest(request(), deps(f));
+    expect(sent(f).headers["X-TuCOPRamp-Client-IP"]).toBe("181.49.12.34");
+
+    const g = upstream(202, {});
+    await proxyRampRequest(
+      request({
+        method: "POST",
+        segments: ["v1", "sessions", "email-otp"],
+        body: "{}",
+        clientIp: "2800:e2:2780:1a3::5",
+      }),
+      deps(g),
+    );
+    expect(sent(g).headers["X-TuCOPRamp-Client-IP"]).toBe("2800:e2:2780:1a3::5");
+  });
+
+  it("leaves the header out rather than send something that is not one address", async () => {
+    for (const clientIp of [null, "", "unknown", "181.49.12.34, 10.0.0.1", "1.2.3.4:443", "[::1]"]) {
+      const f = upstream(200, {});
+      await proxyRampRequest(request({ clientIp }), deps(f));
+      expect(sent(f).headers["X-TuCOPRamp-Client-IP"], String(clientIp)).toBeUndefined();
+    }
+  });
+
+  it("accepts exactly one IPv4 or IPv6 address", () => {
+    expect(clientAddress(" 181.49.12.34 ")).toBe("181.49.12.34");
+    expect(clientAddress("::ffff:181.49.12.34")).toBe("181.49.12.34");
+    expect(clientAddress("2800:e2:2780:1a3::5")).toBe("2800:e2:2780:1a3::5");
+    expect(clientAddress("999.1.1.1")).toBeNull();
+    expect(clientAddress("181.49.12.34,181.49.12.35")).toBeNull();
   });
 
   it("answers 502 without the body when the ramp cannot be reached", async () => {
