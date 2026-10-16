@@ -27,6 +27,9 @@ export type Destination = {
   holder: { name: string | null; bank: string | null; document_last4: string | null } | null;
   rejection_reason: string | null;
   confirmed_at: string | null;
+  /** False once the key was removed (listed with include_disabled=true). */
+  active?: boolean;
+  disabled_at?: string | null;
   created_at: string;
 };
 
@@ -45,18 +48,27 @@ export type Withdrawal = {
   };
   fee_bps: number | null;
   return_address: string | null;
+  /** How long a payout usually takes once the USDC arrive. */
+  settlement_time?: SettlementTime | null;
+  disabled_at?: string | null;
+  created_at?: string;
   /** Most recent first. Only on GET /v1/withdrawals/{id}. */
   payouts?: Payout[];
 };
 
+export type SettlementTime = { min_minutes: number; max_minutes: number };
+
 export type Payout = {
   id: string;
-  /** Bridge's state for the payout. */
+  /** processing, completed, failed, refunded or canceled. */
   status: string;
   amount: Amount | null;
   destination_amount: Amount | null;
+  /** Why it failed, as provider_<reason>. Null unless failed. */
+  error_code?: string | null;
   created_at: string;
   updated_at: string;
+  completed_at?: string | null;
 };
 
 /** A withdraw quote is only a price: send at least source_amount. */
@@ -66,6 +78,7 @@ export type Quote = {
   source_amount: Amount;
   rate: { value: string };
   expires_at: string;
+  settlement_time?: SettlementTime | null;
 };
 
 export type Deposit = {

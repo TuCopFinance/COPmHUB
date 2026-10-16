@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import { checkWalletPair, isWalletAddress, toChecksumAddress } from "./wallet";
 import { keccak256Hex } from "./keccak";
 import {
+  MAX_ACTIVE_KEYS,
   activeDeposit,
-  currentDestination,
   feePercent,
   formatCop,
   formatUsdc,
+  groupKeys,
+  kycStep,
   payoutPhase,
+  settlementWindow,
   stageOf,
 } from "./flow";
 import { offrampErrorMessage, GENERIC_ERROR, isOfferedDocument } from "./messages";
@@ -97,27 +100,80 @@ describe("flow state", () => {
     expect(stageOf(party({}, true))).toBe("restricted");
   });
 
-  it("keeps the key a withdrawal points at, then a verified key, then a pending one", () => {
+  it("sorts own keys into active, ready, pending and disabled", () => {
     const a = destination("dst_a");
     const b = destination("dst_b", { status: "pending" });
-    const third = destination("dst_c", { ownership: "third_party" });
-    const w = { id: "wdr_x", status: "active", destination_id: "dst_a" } as Withdrawal;
-    expect(currentDestination([b, a], [w])?.id).toBe("dst_a");
-    expect(currentDestination([b, a], [])?.id).toBe("dst_a");
-    expect(currentDestination([b], [])?.id).toBe("dst_b");
-    expect(currentDestination([third], [])).toBeNull();
-    expect(currentDestination([destination("dst_r", { status: "rejected" })], [])).toBeNull();
+    const c = destination("dst_c");
+    const d = destination("dst_d");
+    const gone = destination("dst_e", { active: false, disabled_at: "2026-10-14T00:00:00Z" });
+    const goneNoAddress = destination("dst_f", { active: false });
+    const rejected = destination("dst_r", { status: "rejected" });
+    const third = destination("dst_t", { ownership: "third_party" });
+    const w = (id: string, dst: string, status: "active" | "disabled") =>
+      ({ id, status, destination_id: dst }) as Withdrawal;
+    const groups = groupKeys(
+      [a, b, c, d, gone, goneNoAddress, rejected, third],
+      [
+        w("wdr_a", "dst_a", "active"),
+        w("wdr_d", "dst_d", "disabled"),
+        w("wdr_e", "dst_e", "disabled"),
+        w("wdr_x", "dst_unknown", "active"),
+      ],
+    );
+    expect(groups.active.map((e) => e.withdrawal?.id)).toEqual(["wdr_a", "wdr_x"]);
+    expect(groups.active[1].destination).toBeNull();
+    expect(groups.ready.map((x) => x.id)).toEqual(["dst_c"]);
+    expect(groups.pending.map((x) => x.id)).toEqual(["dst_b"]);
+    expect(groups.disabled.map((e) => e.withdrawal?.id)).toEqual(["wdr_d", "wdr_e"]);
+    // a, b, c and d are active keys; removed, rejected and third-party ones do not count.
+    expect(groups.activeKeyCount).toBe(4);
+    expect(MAX_ACTIVE_KEYS).toBe(10);
   });
 
-  it("reads payouts as TuCOP Ramp maps Bridge's drain states", () => {
-    expect(payoutPhase("awaiting_funds")).toBe("waiting");
-    expect(payoutPhase("payment_submitted")).toBe("processing");
-    expect(payoutPhase("refund_in_flight")).toBe("processing");
-    expect(payoutPhase("payment_processed")).toBe("paid");
-    expect(payoutPhase("missing_return_policy")).toBe("failed");
+  it("reads payouts in the ramp's statuses, and the older drain states", () => {
+    expect(payoutPhase("processing")).toBe("processing");
+    expect(payoutPhase("completed")).toBe("paid");
+    expect(payoutPhase("failed")).toBe("failed");
     expect(payoutPhase("refunded")).toBe("returned");
     expect(payoutPhase("canceled")).toBe("canceled");
+    expect(payoutPhase("payment_processed")).toBe("paid");
+    expect(payoutPhase("undeliverable")).toBe("failed");
     expect(payoutPhase("something_new")).toBe("processing");
+  });
+
+  it("says how long the pesos take", () => {
+    expect(settlementWindow({ min_minutes: 15, max_minutes: 30 })).toBe("entre 15 y 30 minutos");
+    expect(settlementWindow({ min_minutes: 5, max_minutes: 5 })).toBe("5 minutos");
+    expect(settlementWindow(null)).toBeNull();
+    expect(settlementWindow(undefined)).toBeNull();
+  });
+
+  it("picks the identity step from the ramp's statuses and links", () => {
+    const local = { termsAccepted: false, identitySent: false };
+    const withLinks = (status: Partial<Party["status"]>, kyc: string | null, tos: string | null) => ({
+      ...party(status),
+      links: { kyc, tos },
+    });
+    expect(kycStep(withLinks({ tos: "pending", kyc: "not_started" }, "k", "t"), local)).toBe("terms");
+    expect(
+      kycStep(withLinks({ tos: "pending", kyc: "not_started" }, "k", "t"), {
+        ...local,
+        termsAccepted: true,
+      }),
+    ).toBe("identity");
+    expect(kycStep(withLinks({ kyc: "incomplete" }, "k", null), local)).toBe("identity");
+    expect(kycStep(withLinks({ kyc: "under_review" }, "k", null), local)).toBe("reviewing");
+    expect(kycStep(withLinks({ kyc: "not_started" }, "k", null), { ...local, identitySent: true })).toBe(
+      "reviewing",
+    );
+    const copPending = { endorsements: [{ name: "cop", status: "pending" as const }] };
+    expect(kycStep(withLinks(copPending, null, null), local)).toBe("enabling");
+    expect(kycStep(withLinks(copPending, "k", null), local)).toBe("cop");
+    expect(kycStep(withLinks(copPending, "k", null), { ...local, identitySent: true })).toBe(
+      "cop_review",
+    );
+    expect(kycStep(withLinks({ kyc: "incomplete" }, null, null), local)).toBe("stuck");
+    expect(kycStep(withLinks({ tos: "pending" }, null, null), local)).toBe("stuck");
   });
 
   it("never offers the tarjeta de identidad", () => {

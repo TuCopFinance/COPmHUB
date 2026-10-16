@@ -12,7 +12,7 @@ import {
 import {
   CONSENT_VERSION,
   OFFRAMP_RETURN_URL,
-  copEndorsement,
+  kycStep,
   stageOf,
 } from "@/lib/offramp/flow";
 import {
@@ -198,6 +198,30 @@ export function OfframpFlow({
     return () => window.removeEventListener("message", onMessage);
   }, [waiting, refresh]);
 
+  // Once identity is approved, a "sent" flag from that step no longer applies:
+  // what is left, if anything, is the Colombia enablement.
+  const kycNow = party?.status.kyc;
+  useEffect(() => {
+    if (kycNow === "approved") queueMicrotask(() => setIdentitySentHere(false));
+  }, [kycNow]);
+
+  // Bridge usually enables Colombia within a minute. Past five minutes the
+  // page says so and offers support.
+  const enabling =
+    stage === "kyc" &&
+    party !== null &&
+    kycStep(party, { termsAccepted: termsAcceptedHere, identitySent: identitySentHere }) ===
+      "enabling";
+  const [enablingLong, setEnablingLong] = useState(false);
+  useEffect(() => {
+    if (!enabling) {
+      queueMicrotask(() => setEnablingLong(false));
+      return;
+    }
+    const timer = window.setTimeout(() => setEnablingLong(true), 5 * 60 * 1000);
+    return () => window.clearTimeout(timer);
+  }, [enabling]);
+
   // Bridge sends the person back to this page in the tab it opened. The
   // session cookie is shared, so that tab can carry on too.
   const [returnedFromBridge, setReturnedFromBridge] = useState(false);
@@ -298,7 +322,9 @@ export function OfframpFlow({
   const identityDone = party?.status.kyc === "approved";
   const termsDone = party?.status.tos === "accepted" || termsAcceptedHere;
   const identityReviewing = party?.status.kyc === "under_review";
-  const copReady = party ? copEndorsement(party) === "approved" : false;
+  const step = party
+    ? kycStep(party, { termsAccepted: termsAcceptedHere, identitySent: identitySentHere })
+    : null;
 
   return (
     <>
@@ -483,7 +509,7 @@ export function OfframpFlow({
                 />
               </div>
 
-              {!termsDone && party.links.tos ? (
+              {step === "terms" && party.links.tos ? (
                 <BridgeStep
                   title="1. Acepta los términos de Bridge"
                   body="La página de Bridge está en inglés. Al pulsar “Accept” aceptas sus Términos de Servicio y su Política de Privacidad."
@@ -498,18 +524,26 @@ export function OfframpFlow({
                 />
               ) : null}
 
-              {termsDone &&
-              !identityDone &&
-              !identityReviewing &&
-              !identitySentHere &&
-              party.links.kyc ? (
+              {(step === "identity" || step === "cop") && party.links.kyc ? (
                 <BridgeStep
-                  title="2. Verifica tu identidad"
-                  body="Bridge te pide una foto de tu documento y una selfie. Cuando el navegador pregunte, permite el uso de la cámara."
-                  frameTitle="Verificación de identidad de Bridge"
+                  title={
+                    step === "cop"
+                      ? "3. Completa tu habilitación para Colombia"
+                      : "2. Verifica tu identidad"
+                  }
+                  body={
+                    step === "cop"
+                      ? "Tu identidad ya está aprobada. Bridge necesita unos datos más para habilitar tu cuenta en Colombia: complétalos aquí y la página avanza sola."
+                      : "Bridge te pide una foto de tu documento y una selfie. Cuando el navegador pregunte, permite el uso de la cámara."
+                  }
+                  frameTitle={
+                    step === "cop"
+                      ? "Habilitación para Colombia en Bridge"
+                      : "Verificación de identidad de Bridge"
+                  }
                   src={embeddedKycUrl(party.links.kyc, window.location.origin)}
                   link={party.links.kyc}
-                  linkLabel="Verificar identidad"
+                  linkLabel={step === "cop" ? "Completar habilitación" : "Verificar identidad"}
                   help="¿No carga o no te deja usar la cámara?"
                   height={680}
                   allow="camera"
@@ -518,37 +552,64 @@ export function OfframpFlow({
                 />
               ) : null}
 
-              {identityDone && termsDone && !copReady ? (
+              {step === "enabling" ? (
                 <WaitPanel
                   title="Ya casi: estamos habilitando tu cuenta"
-                  body="Tu identidad y los términos están listos. Bridge está terminando de activar tu cuenta para Colombia; suele tardar menos de un minuto. No cierres esta página: avanza sola."
+                  body={
+                    enablingLong
+                      ? "Bridge está tardando más de lo normal en activar tu cuenta para Colombia. Puedes dejar esta página abierta, avanza sola, o volver más tarde con tu correo."
+                      : "Tu identidad y los términos están listos. Bridge está terminando de activar tu cuenta para Colombia; suele tardar menos de un minuto. No cierres esta página: avanza sola."
+                  }
                 />
-              ) : identityReviewing || identitySentHere ? (
+              ) : step === "reviewing" || step === "cop_review" ? (
                 <WaitPanel
-                  title="Bridge está revisando tu identidad"
+                  title={
+                    step === "cop_review"
+                      ? "Bridge está revisando tus datos para Colombia"
+                      : "Bridge está revisando tu identidad"
+                  }
                   body="Puede tardar unos minutos. Puedes dejar esta página abierta, avanza sola, o cerrarla y volver más tarde con tu correo."
                 />
-              ) : openedBridge ? (
+              ) : openedBridge && (step === "terms" || step === "identity" || step === "cop") ? (
                 <WaitPanel
                   title="Esperando tu verificación en Bridge"
                   body="Completa los pasos en la pestaña de Bridge que se abrió. Cuando termines, vuelve aquí: esta página se actualiza sola en unos segundos. La pestaña de Bridge la puedes cerrar."
                 />
               ) : null}
+
+              {step === "stuck" || (step === "enabling" && enablingLong) ? (
+                <p className="mt-4 max-w-prose text-sm leading-relaxed text-muted" role="status">
+                  {step === "stuck"
+                    ? "A tu verificación le falta un paso que no podemos abrir desde aquí. "
+                    : "Si sigue así, "}
+                  escríbenos a{" "}
+                  <a
+                    className="font-semibold text-brand underline"
+                    href={`mailto:${privacyContact}`}
+                  >
+                    {privacyContact}
+                  </a>{" "}
+                  con el correo que usaste y lo revisamos.
+                </p>
+              ) : null}
+
               <div className="mt-4 flex flex-wrap gap-3">
-                {openedBridge ||
-                identityReviewing ||
-                identitySentHere ||
-                (identityDone && termsDone) ? (
+                {openedBridge || step !== "terms" ? (
                   <button
                     type="button"
                     onClick={checkNow}
                     disabled={checking}
                     className={secondaryClass}
                   >
-                    {checking ? "Revisando..." : "Ya terminé, revisar ahora"}
+                    {checking
+                      ? "Revisando..."
+                      : step === "enabling" || step === "stuck"
+                        ? "Revisar de nuevo"
+                        : "Ya terminé, revisar ahora"}
                   </button>
                 ) : null}
-                {identitySentHere && !identityReviewing && !identityDone ? (
+                {identitySentHere && (step === "reviewing" || step === "cop_review") &&
+                !identityReviewing ? (
                   <button
                     type="button"
                     onClick={() => setIdentitySentHere(false)}

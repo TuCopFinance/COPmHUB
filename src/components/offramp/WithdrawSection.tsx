@@ -3,19 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { track } from "@/lib/analytics";
 import { normalizeBreBKey } from "@/lib/offramp/breb";
-import {
-  activeWithdrawal,
-  currentDestination,
-  feePercent,
-  formatCop,
-} from "@/lib/offramp/flow";
+import { MAX_ACTIVE_KEYS, groupKeys } from "@/lib/offramp/flow";
 import {
   DESTINATION_REJECTION,
   GENERIC_ERROR,
   SESSION_CODES,
 } from "@/lib/offramp/messages";
 import { RampError, ramp } from "@/components/offramp/api";
-import { KeyHint, WaitPanel } from "@/components/offramp/parts";
+import {
+  AddressCard,
+  DisabledList,
+  PendingKeyCard,
+  ReadyKeyCard,
+} from "@/components/offramp/KeyCards";
+import { KeyHint } from "@/components/offramp/parts";
 import type { Destination, Withdrawal } from "@/components/offramp/types";
 import {
   Field,
@@ -24,17 +25,16 @@ import {
   primaryClass,
   secondaryClass,
 } from "@/components/offramp/ui";
-import { WalletConfirm } from "@/components/offramp/WalletConfirm";
-import { PayoutList, QuoteCalculator } from "@/components/offramp/WithdrawTools";
 
 // The Bre-B directory answers in about a minute.
 const POLL_MS = 4000;
 const POLL_LIMIT_MS = 3 * 60 * 1000;
 
 /**
- * Off-ramp for a verified person: their own Bre-B key, then the reusable
- * withdrawal address. A returning person sees what they already have; nothing
- * is created twice.
+ * Off-ramp for a verified person: their own Bre-B keys (up to
+ * MAX_ACTIVE_KEYS), each with its own withdrawal address. A returning person
+ * sees what they already have; nothing is created twice. Disabled addresses
+ * stay listed so the person knows not to send to them.
  */
 export function WithdrawSection({
   onSessionExpired,
@@ -49,8 +49,8 @@ export function WithdrawSection({
   const [error, setError] = useState<string | null>(null);
   const [breBKey, setBreBKey] = useState("");
   const [rejected, setRejected] = useState<Destination | null>(null);
+  const [adding, setAdding] = useState(false);
   const [pollExpired, setPollExpired] = useState(false);
-  const [copied, setCopied] = useState(false);
   const pollStarted = useRef<number | null>(null);
 
   const fail = useCallback(
@@ -67,7 +67,7 @@ export function WithdrawSection({
   const load = useCallback(async () => {
     try {
       const [dst, wdr] = await Promise.all([
-        ramp<{ data: Destination[] }>("GET", "v1/destinations"),
+        ramp<{ data: Destination[] }>("GET", "v1/destinations?include_disabled=true"),
         ramp<{ data: Withdrawal[] }>("GET", "v1/withdrawals"),
       ]);
       setDestinations(dst.data.data);
@@ -81,33 +81,33 @@ export function WithdrawSection({
     queueMicrotask(() => void load());
   }, [load]);
 
-  const destination = destinations ? currentDestination(destinations, withdrawals) : null;
-  // Any active address is shown, even when its Bre-B key is not in the list
-  // (people who pre-registered before keep the address they already had).
-  const withdrawal =
-    activeWithdrawal(withdrawals, destination?.id ?? null) ?? activeWithdrawal(withdrawals, null);
-  const payoutKey = withdrawal
-    ? (destinations ?? []).find((d) => d.id === withdrawal.destination_id) ?? null
-    : null;
-  // A key just refused keeps the form on screen with the reason, even when an
-  // older key would otherwise be shown.
-  const showForm = Boolean(rejected && destinations?.[0]?.id === rejected.id);
+  const groups = groupKeys(destinations ?? [], withdrawals);
+  const hasAnything =
+    groups.active.length + groups.ready.length + groups.pending.length + groups.disabled.length > 0;
+  const atLimit = groups.activeKeyCount >= MAX_ACTIVE_KEYS;
+  // The form shows for the first key, when the person asks for another, and
+  // while a key just refused is on screen with its reason.
+  const showForm = !atLimit && (!hasAnything || adding || rejected !== null);
+  const anyActive = groups.active.length > 0;
 
   useEffect(() => {
-    onActiveChange(Boolean(withdrawal));
-  }, [withdrawal, onActiveChange]);
+    onActiveChange(anyActive);
+  }, [anyActive, onActiveChange]);
 
-  const upsert = (next: Destination) =>
+  const upsertDestination = (next: Destination) =>
     setDestinations((list) => [next, ...(list ?? []).filter((d) => d.id !== next.id)]);
+  const upsertWithdrawal = (next: Withdrawal) =>
+    setWithdrawals((list) => [next, ...list.filter((w) => w.id !== next.id)]);
 
-  // Waits for the Bre-B directory while the key is pending.
-  const pendingId = destination?.status === "pending" ? destination.id : null;
+  // Waits for the Bre-B directory while any key is pending.
+  const pendingIds = groups.pending.map((d) => d.id).join(",");
   useEffect(() => {
-    if (!pendingId) {
+    if (!pendingIds) {
       pollStarted.current = null;
       return;
     }
     pollStarted.current ??= Date.now();
+    const ids = pendingIds.split(",");
     const timer = window.setInterval(async () => {
       if (pollStarted.current && Date.now() - pollStarted.current > POLL_LIMIT_MS) {
         setPollExpired(true);
@@ -115,18 +115,21 @@ export function WithdrawSection({
         return;
       }
       try {
-        const { data } = await ramp<Destination>("GET", `v1/destinations/${pendingId}`);
-        if (data.status === "rejected") {
-          setRejected(data);
-          track("offramp_key_rejected", { section: "offramp" });
+        for (const id of ids) {
+          const { data } = await ramp<Destination>("GET", `v1/destinations/${id}`);
+          if (data.status === "pending") continue;
+          if (data.status === "rejected") {
+            setRejected(data);
+            track("offramp_key_rejected", { section: "offramp" });
+          }
+          upsertDestination(data);
         }
-        if (data.status !== "pending") upsert(data);
       } catch (cause) {
         fail(cause);
       }
     }, POLL_MS);
     return () => window.clearInterval(timer);
-  }, [pendingId, fail]);
+  }, [pendingIds, fail]);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -150,17 +153,21 @@ export function WithdrawSection({
       });
       setBreBKey("");
       setRejected(data.status === "rejected" ? data : null);
+      setAdding(false);
       setPollExpired(false);
-      upsert(data);
+      upsertDestination(data);
+      track("offramp_key_added", { section: "offramp" });
+      // A key removed before comes back with its disabled address.
+      if (data.status === "verified") await load();
     });
 
-  // Removes the person's own key (not allowed once it has an active address).
+  // Not allowed while the key has an active address (409 destination_in_use).
   const removeKey = (id: string) =>
     run(async () => {
       await ramp<null>("DELETE", `v1/destinations/${id}`);
       track("offramp_key_removed", { section: "offramp" });
       setRejected(null);
-      setDestinations((list) => (list ?? []).filter((d) => d.id !== id));
+      await load();
     });
 
   const createWithdrawal = (destinationId: string, returnAddress: string) =>
@@ -170,23 +177,30 @@ export function WithdrawSection({
         return_address: returnAddress,
       });
       track("offramp_activated", { section: "offramp" });
-      setWithdrawals((list) => [data, ...list.filter((w) => w.id !== data.id)]);
+      upsertWithdrawal(data);
+    });
+
+  // Re-enables the same address; it keeps its return wallet.
+  const enableWithdrawal = (destinationId: string) =>
+    run(async () => {
+      const { data } = await ramp<Withdrawal>("POST", "v1/withdrawals", {
+        destination_id: destinationId,
+      });
+      track("offramp_address_enabled", { section: "offramp" });
+      upsertWithdrawal(data);
+    });
+
+  const disableWithdrawal = (id: string) =>
+    run(async () => {
+      const { data } = await ramp<Withdrawal>("DELETE", `v1/withdrawals/${id}`);
+      track("offramp_address_disabled", { section: "offramp" });
+      upsertWithdrawal(data);
     });
 
   const checkAgain = () => {
     pollStarted.current = Date.now();
     setPollExpired(false);
     void load();
-  };
-
-  const copyAddress = async (address: string) => {
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2500);
-    } catch {
-      setError("No pudimos copiar la dirección. Selecciónala y cópiala a mano.");
-    }
   };
 
   const errorLine = error ? (
@@ -209,187 +223,25 @@ export function WithdrawSection({
     );
   }
 
-  if (withdrawal) {
-    const fee = feePercent(withdrawal.fee_bps);
-    const minimum = formatCop(withdrawal.deposit.minimum_destination_amount?.amount);
-    return (
-      <>
-        <p className="text-xs font-bold uppercase tracking-wide text-[#137211]">Activo</p>
-        <h2 className={headingClass + " mt-2"}>Tu off-ramp ya está habilitado</h2>
-        <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
-          Esta es tu dirección de liquidación. Todo lo que envíes aquí se convierte a pesos
-          y llega a tu llave Bre-B
-          {payoutKey ? (
-            <>
-              {" "}
-              <strong className="text-ink">
-                {payoutKey.key_masked}
-                {payoutKey.holder?.bank ? ` (${payoutKey.holder.bank})` : ""}
-              </strong>
-            </>
-          ) : null}
-          , normalmente en unos minutos.
-        </p>
-
-        <div className="mt-6 rounded-2xl border-2 border-co-red bg-[#fdf1f2] p-5" role="note">
-          <p className="text-lg font-extrabold uppercase leading-snug tracking-tight text-co-red sm:text-2xl">
-            Solo recibe USDC en la red Celo
-          </p>
-          <p className="mt-2 text-sm font-semibold leading-relaxed text-ink">
-            No envíes otro token ni uses otra red. Lo que llegue distinto a USDC en Celo se
-            puede perder y no lo podemos recuperar.
-          </p>
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-line bg-bg p-5">
-          <p className="text-xs font-bold uppercase tracking-wide text-muted">
-            Tu dirección de liquidación
-          </p>
-          <p className="mt-2 break-all font-mono text-[15px] font-bold text-ink">
-            {withdrawal.deposit.address}
-          </p>
-          <button
-            type="button"
-            onClick={() => copyAddress(withdrawal.deposit.address)}
-            className={primaryClass + " mt-4"}
-          >
-            {copied ? "Copiada" : "Copiar dirección"}
-          </button>
-        </div>
-
-        <dl className="mt-5 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
-          <dt className="text-muted">Token</dt>
-          <dd className="font-semibold text-ink">USDC</dd>
-          <dt className="text-muted">Red</dt>
-          <dd className="font-semibold text-ink">Celo</dd>
-          <dt className="text-muted">Contrato de USDC</dt>
-          <dd className="break-all font-mono text-[13px] font-semibold text-ink">
-            {withdrawal.deposit.token_contract}
-          </dd>
-          {minimum ? (
-            <>
-              <dt className="text-muted">Mínimo por envío</dt>
-              <dd className="font-semibold text-ink">el equivalente a {minimum} COP</dd>
-            </>
-          ) : null}
-          {fee ? (
-            <>
-              <dt className="text-muted">Comisión</dt>
-              <dd className="font-semibold text-ink">
-                {fee}% más la tasa de cambio del momento
-              </dd>
-            </>
-          ) : null}
-          {withdrawal.return_address ? (
-            <>
-              <dt className="text-muted">Si un pago falla</dt>
-              <dd className="break-all text-ink">
-                el USDC vuelve a{" "}
-                <span className="font-mono text-[13px] font-semibold">
-                  {withdrawal.return_address}
-                </span>
-              </dd>
-            </>
-          ) : null}
-        </dl>
-
-        <p className="mt-5 max-w-prose text-sm leading-relaxed text-muted">
-          La dirección es siempre la misma: guárdala y úsala cuando quieras. Haz primero un
-          envío pequeño para confirmar que llega.
-        </p>
-        <QuoteCalculator withdrawal={withdrawal} onSessionExpired={onSessionExpired} />
-        <PayoutList withdrawalId={withdrawal.id} onSessionExpired={onSessionExpired} />
-        {errorLine}
-      </>
-    );
-  }
-
-  if (destination && !showForm && destination.status === "pending") {
-    return (
-      <>
-        <h2 className={headingClass}>Estamos validando tu llave con el banco</h2>
-        <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
-          Llave Bre-B: <strong className="text-ink">{destination.key_masked}</strong>
-        </p>
-        {pollExpired ? (
-          <>
-            <p className="mt-4 max-w-prose text-sm leading-relaxed text-muted" role="status">
-              El banco aún no responde. Puedes revisar de nuevo en un momento o volver más
-              tarde con tu correo.
-            </p>
-            <button type="button" onClick={checkAgain} className={secondaryClass + " mt-4"}>
-              Revisar de nuevo
-            </button>
-          </>
-        ) : (
-          <WaitPanel
-            title="Consultando el directorio Bre-B"
-            body="Confirmamos que la cuenta está a tu nombre. Suele tardar alrededor de un minuto: no cierres esta página, avanza sola."
-          />
-        )}
-        {errorLine}
-      </>
-    );
-  }
-
-  if (destination && !showForm && destination.status === "verified") {
-    return (
-      <>
-        <h2 className={headingClass}>¿A qué billetera devolvemos un pago fallido?</h2>
-        <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
-          El banco confirmó que esta llave Bre-B está a tu nombre. Los pesos de tus ventas
-          llegan a esta cuenta:
-        </p>
-        <dl className="mt-4 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-3 rounded-2xl border border-line bg-bg p-5 text-sm">
-          <dt className="text-muted">Llave</dt>
-          <dd className="font-semibold text-ink">{destination.key_masked}</dd>
-          <dt className="text-muted">Banco</dt>
-          <dd className="font-semibold text-ink">{destination.holder?.bank ?? "Sin dato"}</dd>
-          <dt className="text-muted">Titular</dt>
-          <dd className="font-semibold text-ink">{destination.holder?.name ?? "Sin dato"}</dd>
-          {destination.holder?.document_last4 ? (
-            <>
-              <dt className="text-muted">Documento</dt>
-              <dd className="font-semibold text-ink">
-                termina en {destination.holder.document_last4}
-              </dd>
-            </>
-          ) : null}
-        </dl>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => removeKey(destination.id)}
-          className="mt-3 text-sm font-semibold text-brand hover:underline"
-        >
-          No es mi cuenta, quitar esta llave
-        </button>
-        <p className="mt-6 max-w-prose text-sm leading-relaxed text-muted">
-          Si alguna vez un pago a esa cuenta falla, el USDC vuelve a tu billetera en la red
-          Celo.
-        </p>
-        <WalletConfirm
-          purpose="Usa una billetera tuya en la red Celo. Esta dirección no se puede cambiar después."
-          busy={busy}
-          onConfirm={(address) => createWithdrawal(destination.id, address)}
-        />
-        {errorLine}
-      </>
-    );
-  }
-
-  return (
+  const keyForm = (
     <form
+      className={hasAnything ? "mt-6 rounded-2xl border border-line p-5" : undefined}
       onSubmit={(event) => {
         event.preventDefault();
         saveKey();
       }}
     >
-      <h2 className={headingClass}>Registra tu llave Bre-B</h2>
+      {hasAnything ? (
+        <p className="text-base font-bold text-ink">Agregar otra llave Bre-B</p>
+      ) : (
+        <h2 className={headingClass}>Registra tu llave Bre-B</h2>
+      )}
       <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
-        Tu identidad está verificada. Ahora escribe la llave Bre-B de una cuenta a tu
-        nombre: celular, documento, correo o llave alfanumérica. No se aceptan cuentas de
-        terceros.
+        {hasAnything
+          ? `Cada llave tiene su propia dirección de liquidación. Puedes tener hasta ${MAX_ACTIVE_KEYS} llaves activas. `
+          : "Tu identidad está verificada. "}
+        Escribe la llave Bre-B de una cuenta a tu nombre: celular, documento, correo o llave
+        alfanumérica. No se aceptan cuentas de terceros.
       </p>
       {rejected ? (
         <p
@@ -421,8 +273,117 @@ export function WithdrawSection({
         <button type="submit" disabled={busy} className={primaryClass}>
           {busy ? "Enviando..." : "Validar llave"}
         </button>
+        {hasAnything ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setAdding(false);
+              setRejected(null);
+              setBreBKey("");
+            }}
+            className={secondaryClass}
+          >
+            Cancelar
+          </button>
+        ) : null}
       </div>
-      {errorLine}
     </form>
+  );
+
+  if (!hasAnything) {
+    return (
+      <>
+        {keyForm}
+        {errorLine}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {anyActive ? (
+        <>
+          <p className="text-xs font-bold uppercase tracking-wide text-[#137211]">Activo</p>
+          <h2 className={headingClass + " mt-2"}>Tu off-ramp ya está habilitado</h2>
+          <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
+            Cada llave Bre-B tiene su propia dirección de liquidación. Lo que envíes a una
+            dirección llega solo a su llave. Las direcciones son siempre las mismas: guárdalas y
+            úsalas cuando quieras. Haz primero un envío pequeño para confirmar que llega.
+          </p>
+          <div className="mt-6 rounded-2xl border-2 border-co-red bg-[#fdf1f2] p-5" role="note">
+            <p className="text-lg font-extrabold uppercase leading-snug tracking-tight text-co-red sm:text-2xl">
+              Solo reciben USDC en la red Celo
+            </p>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-ink">
+              No envíes otro token ni uses otra red. Lo que llegue distinto a USDC en Celo se
+              puede perder y no lo podemos recuperar.
+            </p>
+          </div>
+        </>
+      ) : (
+        <h2 className={headingClass}>Tus llaves Bre-B</h2>
+      )}
+
+      {groups.pending.map((d) => (
+        <PendingKeyCard
+          key={d.id}
+          destination={d}
+          expired={pollExpired}
+          onCheckAgain={checkAgain}
+        />
+      ))}
+      {groups.ready.map((d) => (
+        <ReadyKeyCard
+          key={d.id}
+          destination={d}
+          busy={busy}
+          onRemove={() => removeKey(d.id)}
+          onCreate={(address) => createWithdrawal(d.id, address)}
+        />
+      ))}
+      {groups.active.map((entry) =>
+        entry.withdrawal ? (
+          <AddressCard
+            key={entry.withdrawal.id}
+            entry={{ destination: entry.destination, withdrawal: entry.withdrawal }}
+            busy={busy}
+            onDisable={() => disableWithdrawal(entry.withdrawal!.id)}
+            onSessionExpired={onSessionExpired}
+          />
+        ) : null,
+      )}
+
+      {errorLine}
+
+      {showForm ? (
+        keyForm
+      ) : atLimit ? (
+        <p className="mt-6 max-w-prose text-sm leading-relaxed text-muted">
+          Tienes {MAX_ACTIVE_KEYS} llaves Bre-B activas, el máximo. Para agregar otra, deshabilita
+          la dirección de una y quita esa llave.
+        </p>
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setAdding(true);
+            setError(null);
+          }}
+          className={secondaryClass + " mt-6"}
+        >
+          Agregar otra llave Bre-B
+        </button>
+      )}
+
+      <DisabledList
+        entries={groups.disabled}
+        busy={busy}
+        canAddKey={!atLimit}
+        onEnable={enableWithdrawal}
+        onRemoveKey={removeKey}
+      />
+    </>
   );
 }

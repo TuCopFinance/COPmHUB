@@ -35,8 +35,9 @@ const MESSAGES: Record<string, string> = {
     "Tu llave Bre-B aún se está validando. Espera un momento e intenta de nuevo.",
   destination_not_found: "No encontramos esa llave Bre-B. Regístrala de nuevo.",
   destination_in_use:
-    "Esa llave ya tiene una dirección de liquidación activa, así que no se puede quitar. Escríbenos si necesitas cambiarla.",
-  destination_limit_reached: "Registraste muchas llaves este mes. Intenta más adelante.",
+    "Esa llave tiene una dirección de liquidación activa. Deshabilita la dirección antes de quitar la llave.",
+  destination_limit_reached:
+    "Llegaste al máximo de llaves Bre-B activas. Quita una para agregar otra.",
   // Wallet
   invalid_wallet_address: "Esa dirección de billetera no es válida.",
   invalid_return_address: "Esa dirección de billetera no es válida.",
@@ -48,6 +49,8 @@ const MESSAGES: Record<string, string> = {
   invalid_amount: "Escribe un monto válido en pesos.",
   rate_unavailable: "No pudimos consultar la tasa de cambio. Intenta de nuevo en unos minutos.",
   withdrawal_not_found: "No encontramos tu dirección de liquidación.",
+  destination_not_first_party: "Esa llave no es tuya: solo puedes usar cuentas a tu nombre.",
+  first_party_not_available: "Esta cuenta no puede registrar llaves propias. Escríbenos.",
   deposit_not_found: "No encontramos tu llave de compra.",
   idempotency_in_progress: "Tu solicitud anterior aún se está procesando. Espera un momento.",
   // Provider

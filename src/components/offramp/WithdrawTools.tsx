@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatCop, formatUsdc, payoutPhase, type PayoutPhase } from "@/lib/offramp/flow";
+import {
+  formatCop,
+  formatUsdc,
+  payoutPhase,
+  settlementWindow,
+  type PayoutPhase,
+} from "@/lib/offramp/flow";
 import { GENERIC_ERROR, SESSION_CODES } from "@/lib/offramp/messages";
 import { RampError, ramp } from "@/components/offramp/api";
 import type { Payout, Quote, Withdrawal } from "@/components/offramp/types";
@@ -10,14 +16,21 @@ import { Field, inputClass, secondaryClass } from "@/components/offramp/ui";
 // Bridge does not pay out below this (also in withdrawal.deposit).
 const FLOOR_COP = 4000;
 
-/** Payout phases, in words (mapping agreed with TuCOP Ramp). */
+/** Payout statuses, in words. */
 const PAYOUT_LABEL: Record<PayoutPhase, string> = {
-  waiting: "Esperando el USDC",
   processing: "En proceso",
   paid: "Pagado",
   failed: "No se pudo pagar",
   returned: "Devuelto a tu billetera",
   canceled: "Cancelado",
+};
+
+const PAYOUT_TONE: Record<PayoutPhase, string> = {
+  processing: "text-muted",
+  paid: "font-semibold text-[#137211]",
+  failed: "font-semibold text-co-red",
+  returned: "text-ink",
+  canceled: "text-muted",
 };
 
 function errorText(cause: unknown): string {
@@ -104,6 +117,9 @@ export function QuoteCalculator({
           </strong>{" "}
           para recibir <strong>{formatCop(quote.destination_amount.amount)} COP</strong>. Es
           un precio de referencia e incluye la comisión: lo que envíes de más también se paga.
+          {settlementWindow(quote.settlement_time ?? withdrawal.settlement_time)
+            ? ` Los pesos llegan ${settlementWindow(quote.settlement_time ?? withdrawal.settlement_time)} después de que recibimos el USDC.`
+            : null}
         </p>
       ) : null}
       {error ? (
@@ -146,6 +162,12 @@ export function PayoutList({
   return (
     <div className="mt-6 max-w-xl">
       <p className="text-sm font-semibold text-ink">Tus retiros</p>
+      {payouts.some((p) => payoutPhase(p.status) === "failed") ? (
+        <p className="mt-2 text-sm text-muted">
+          Un pago que no se pudo hacer no se reintenta solo. Antes de enviar de nuevo, revisa tu
+          billetera de devolución: si el USDC no volvió, escríbenos con la fecha del envío.
+        </p>
+      ) : null}
       {payouts.length === 0 ? (
         <p className="mt-2 text-sm text-muted">
           {error ?? "Aún no has enviado USDC a esta dirección."}
@@ -168,7 +190,9 @@ export function PayoutList({
                     ? `${formatUsdc(payout.amount.amount) ?? payout.amount.amount} ${payout.amount.asset}`
                     : ""}
               </span>
-              <span className="text-muted">{PAYOUT_LABEL[payoutPhase(payout.status)]}</span>
+              <span className={PAYOUT_TONE[payoutPhase(payout.status)]}>
+                {PAYOUT_LABEL[payoutPhase(payout.status)]}
+              </span>
             </li>
           ))}
         </ul>

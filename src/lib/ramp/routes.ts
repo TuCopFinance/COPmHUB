@@ -39,7 +39,14 @@ export const RAMP_ROUTES: readonly RampRoute[] = [
   },
   { method: "GET", pattern: /^v1\/parties\/me$/, session: "use", idempotent: false },
   { method: "POST", pattern: /^v1\/parties$/, session: "use", idempotent: true },
-  { method: "GET", pattern: /^v1\/destinations$/, session: "use", idempotent: false },
+  // include_disabled=true also lists the keys the person removed.
+  {
+    method: "GET",
+    pattern: /^v1\/destinations$/,
+    session: "use",
+    idempotent: false,
+    query: ["include_disabled"],
+  },
   { method: "POST", pattern: /^v1\/destinations$/, session: "use", idempotent: true },
   { method: "GET", pattern: new RegExp(`^v1/destinations/${DST}$`, "i"), session: "use", idempotent: false },
   // Removes the person's own key, here and at the provider. The ramp refuses
@@ -49,6 +56,8 @@ export const RAMP_ROUTES: readonly RampRoute[] = [
   { method: "POST", pattern: /^v1\/withdrawals$/, session: "use", idempotent: true },
   // The address with its payouts.
   { method: "GET", pattern: new RegExp(`^v1/withdrawals/${WDR}$`, "i"), session: "use", idempotent: false },
+  // Disables an address. POST /v1/withdrawals with its key re-enables it.
+  { method: "DELETE", pattern: new RegExp(`^v1/withdrawals/${WDR}$`, "i"), session: "use", idempotent: false },
   // How much USDC to send so a given amount of pesos arrives. Only a price.
   { method: "POST", pattern: /^v1\/quotes$/, session: "use", idempotent: true },
   { method: "GET", pattern: /^v1\/deposits$/, session: "use", idempotent: false },

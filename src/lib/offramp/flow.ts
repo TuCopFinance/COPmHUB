@@ -31,35 +31,68 @@ export function copEndorsement(party: Party): string | null {
   return party.status.endorsements.find((e) => e.name === "cop")?.status ?? null;
 }
 
-/** The first-party Bre-B key the off-ramp works with, if any. */
-export function currentDestination(
+/** At most this many active own Bre-B keys per person (TuCOP's choice for this app). */
+export const MAX_ACTIVE_KEYS = 10;
+
+/** One of the person's own Bre-B keys, with its withdrawal address if it has one. */
+export type KeyEntry = {
+  /** Null for an address whose key this app cannot see (pre-registered elsewhere). */
+  destination: Destination | null;
+  withdrawal: Withdrawal | null;
+};
+
+export type KeyGroups = {
+  /** Verified keys with an active address. */
+  active: KeyEntry[];
+  /** Verified keys without an address yet: they need the return wallet. */
+  ready: Destination[];
+  /** Keys the Bre-B directory is still checking. */
+  pending: Destination[];
+  /** Disabled addresses, with their key (which may have been removed too). */
+  disabled: KeyEntry[];
+  /** Active own keys that count toward MAX_ACTIVE_KEYS. */
+  activeKeyCount: number;
+};
+
+/**
+ * Sorts the person's own keys and addresses for the off-ramp screen. Both
+ * lists come newest first from the ramp and keep that order. A rejected key
+ * is left out: the form shows why it was refused.
+ */
+export function groupKeys(
   destinations: readonly Destination[],
   withdrawals: readonly Withdrawal[],
-): Destination | null {
+): KeyGroups {
   const own = destinations.filter((d) => d.ownership === "first_party");
-  const active = withdrawals.find((w) => w.status === "active");
-  if (active) {
-    const linked = own.find((d) => d.id === active.destination_id);
-    if (linked) return linked;
+  const byDestination = new Map<string, Withdrawal>();
+  for (const w of withdrawals) {
+    if (!byDestination.has(w.destination_id)) byDestination.set(w.destination_id, w);
   }
-  // The list is newest first. A verified key wins over a newer pending one,
-  // as on ramp.tucop.xyz.
-  return (
-    own.find((d) => d.status === "verified") ??
-    own.find((d) => d.status === "pending") ??
-    null
-  );
-}
+  const groups: KeyGroups = { active: [], ready: [], pending: [], disabled: [], activeKeyCount: 0 };
+  const seen = new Set<string>();
 
-export function activeWithdrawal(
-  withdrawals: readonly Withdrawal[],
-  destinationId: string | null,
-): Withdrawal | null {
-  return (
-    withdrawals.find(
-      (w) => w.status === "active" && (!destinationId || w.destination_id === destinationId),
-    ) ?? null
-  );
+  for (const d of own) {
+    const live = d.active !== false;
+    const w = byDestination.get(d.id) ?? null;
+    if (w) seen.add(w.id);
+    if (live && d.status !== "rejected") groups.activeKeyCount += 1;
+    if (!live) {
+      if (w) groups.disabled.push({ destination: d, withdrawal: w });
+      continue;
+    }
+    if (d.status === "pending") groups.pending.push(d);
+    else if (d.status === "verified") {
+      if (w?.status === "active") groups.active.push({ destination: d, withdrawal: w });
+      else if (w) groups.disabled.push({ destination: d, withdrawal: w });
+      else groups.ready.push(d);
+    }
+  }
+  // Addresses whose key is not in the list.
+  for (const w of withdrawals) {
+    if (seen.has(w.id)) continue;
+    (w.status === "active" ? groups.active : groups.disabled).push({ destination: null, withdrawal: w });
+  }
+  return groups;
 }
 
 export function activeDeposit(deposits: readonly Deposit[]): Deposit | null {
@@ -67,29 +100,77 @@ export function activeDeposit(deposits: readonly Deposit[]): Deposit | null {
 }
 
 /**
- * How a payout from the withdrawal address reads, from Bridge's drain state
- * (mapping agreed with TuCOP Ramp). Anything unknown is still processing.
+ * A payout from a withdrawal address, in the ramp's own statuses (the same as
+ * a payment). The older Bridge drain states are still read, in case an old
+ * payout carries one. Anything unknown is still in progress.
  */
-export type PayoutPhase = "waiting" | "processing" | "paid" | "failed" | "returned" | "canceled";
+export type PayoutPhase = "processing" | "paid" | "failed" | "returned" | "canceled";
 
 const PAYOUT_PHASES: Record<string, PayoutPhase> = {
-  awaiting_funds: "waiting",
-  in_review: "processing",
-  funds_received: "processing",
-  payment_submitted: "processing",
-  refund_in_flight: "processing",
+  processing: "processing",
+  completed: "paid",
+  failed: "failed",
+  refunded: "returned",
+  canceled: "canceled",
+  // Bridge's drain states, from before the ramp mapped them.
   payment_processed: "paid",
   undeliverable: "failed",
   error: "failed",
   missing_return_policy: "failed",
   refund_failed: "failed",
   returned: "returned",
-  refunded: "returned",
-  canceled: "canceled",
 };
 
-export function payoutPhase(state: string): PayoutPhase {
-  return PAYOUT_PHASES[state] ?? "processing";
+export function payoutPhase(status: string): PayoutPhase {
+  return PAYOUT_PHASES[status] ?? "processing";
+}
+
+/** "entre 15 y 30 minutos", from a withdrawal's or quote's settlement_time. */
+export function settlementWindow(
+  time: { min_minutes: number; max_minutes: number } | null | undefined,
+): string | null {
+  if (!time || !Number.isFinite(time.min_minutes) || !Number.isFinite(time.max_minutes)) {
+    return null;
+  }
+  const { min_minutes: min, max_minutes: max } = time;
+  if (max <= 0) return null;
+  const unit = (n: number) => (n === 1 ? "minuto" : "minutos");
+  if (min === max) return `${max} ${unit(max)}`;
+  return `entre ${min} y ${max} ${unit(max)}`;
+}
+
+/**
+ * What the identity step shows. TuCOPRamp decides the statuses; the local
+ * flags only move the screen on before the next poll.
+ * - `terms`, `identity`: a Bridge page to fill in.
+ * - `reviewing`: Bridge is reviewing what the person sent.
+ * - `cop`: identity is approved but enabling Colombia needs something more,
+ *   in a page the ramp returns again in `links.kyc`.
+ * - `cop_review`: the person sent that page; Bridge is reviewing it.
+ * - `enabling`: Bridge is enabling Colombia by itself.
+ * - `stuck`: the ramp gave no page to fill in; only support can help.
+ */
+export type KycStep =
+  | "terms"
+  | "identity"
+  | "reviewing"
+  | "cop"
+  | "cop_review"
+  | "enabling"
+  | "stuck";
+
+export function kycStep(
+  party: Party,
+  local: { termsAccepted: boolean; identitySent: boolean },
+): KycStep {
+  const termsDone = party.status.tos === "accepted" || local.termsAccepted;
+  if (!termsDone) return party.links.tos ? "terms" : "stuck";
+  if (party.status.kyc === "approved") {
+    if (!party.links.kyc) return "enabling";
+    return local.identitySent ? "cop_review" : "cop";
+  }
+  if (party.status.kyc === "under_review" || local.identitySent) return "reviewing";
+  return party.links.kyc ? "identity" : "stuck";
 }
 
 /** "25.391500" USDC as "25,3915". */

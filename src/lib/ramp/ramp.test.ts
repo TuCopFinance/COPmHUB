@@ -65,6 +65,7 @@ describe("ramp allowlist", () => {
     expect(matchRampRoute("POST", ["v1", "deposits"])).not.toBeNull();
     expect(matchRampRoute("GET", ["v1", "withdrawals", WDR])).not.toBeNull();
     expect(matchRampRoute("POST", ["v1", "quotes"])?.idempotent).toBe(true);
+    expect(matchRampRoute("DELETE", ["v1", "withdrawals", WDR])?.idempotent).toBe(false);
   });
 
   it("refuses everything else", () => {
@@ -72,7 +73,8 @@ describe("ramp allowlist", () => {
     expect(matchRampRoute("POST", ["v1", "payments"])).toBeNull();
     expect(matchRampRoute("GET", ["v1", "prereg", "me"])).toBeNull();
     expect(matchRampRoute("POST", ["v1", "destinations", DST, "confirm"])).toBeNull();
-    expect(matchRampRoute("DELETE", ["v1", "withdrawals", WDR])).toBeNull();
+    expect(matchRampRoute("DELETE", ["v1", "withdrawals"])).toBeNull();
+    expect(matchRampRoute("DELETE", ["v1", "deposits", "dep_01j9z3k8q2m4n6p8r0s2t4v6w8"])).toBeNull();
     expect(matchRampRoute("GET", ["v1", "parties"])).toBeNull();
     expect(matchRampRoute("POST", ["v1", "parties", "me"])).toBeNull();
     expect(matchRampRoute("GET", ["v1", "destinations", "dst_bad"])).toBeNull();
@@ -91,6 +93,10 @@ describe("ramp allowlist", () => {
     expect(forwardedQuery(route, search)).toBe("?country=COL&party_type=individual");
     const me = matchRampRoute("GET", ["v1", "parties", "me"])!;
     expect(forwardedQuery(me, search)).toBe("");
+    const keys = matchRampRoute("GET", ["v1", "destinations"])!;
+    expect(forwardedQuery(keys, new URLSearchParams("include_disabled=true&x=1"))).toBe(
+      "?include_disabled=true",
+    );
   });
 });
 
